@@ -44,8 +44,9 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-volatile uint8_t button_pressed = 0;
-volatile uint8_t led_freq = 2;
+extern uint8_t UART_rx_temp;
+extern RingBuffer_t UART_rx_buffer;
+extern RingBuffer_t UART_tx_buffer;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -76,7 +77,8 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
+  ring_buffer_init(&UART_rx_buffer);
+  ring_buffer_init(&UART_tx_buffer);
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -90,7 +92,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_UART_Receive_IT(&huart2, &UART_rx_temp, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
