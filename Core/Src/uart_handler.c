@@ -8,12 +8,15 @@
 #include "uart_handler.h"
 
 uint8_t UART_rx_temp;
-
 uint8_t UART_tx_temp;
-uint8_t UART_tx_in_progress = 0;
 
-RingBuffer_t UART_rx_buffer;
-RingBuffer_t UART_tx_buffer;
+uint32_t test_counter = 0;
+
+volatile uint8_t UART_tx_in_progress = 0;
+
+extern RingBuffer_t UART_rx_ring_buffer;
+extern RingBuffer_t UART_tx_ring_buffer;
+extern RingBuffer_t Sensor_ring_buffer;
 
 /*
  * Obsługa odbierania danych
@@ -21,9 +24,15 @@ RingBuffer_t UART_tx_buffer;
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	if(huart->Instance != USART2) return;
 
-	UART_SendText("STM32 RX");
+	// TESTOWANIE
+	char txtbuff[100];
+	test_counter++;
+	snprintf(txtbuff, sizeof(txtbuff), "STM32 RX COUNT: %lu\r\n", test_counter);
+	// TESTOWANIE
 
-	ring_buffer_put(&UART_rx_buffer, UART_rx_temp);
+	UART_SendText(txtbuff);
+
+	ring_buffer_put(&UART_rx_ring_buffer, UART_rx_temp);
 
 	HAL_UART_Receive_IT(&huart2, &UART_rx_temp, 1);
 }
@@ -34,12 +43,12 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 	if(huart->Instance != USART2) return;
 
-	if(ring_buffer_is_empty(&UART_tx_buffer)) {
+	if(ring_buffer_is_empty(&UART_tx_ring_buffer)) {
 		UART_tx_in_progress = 0;
 		return;
 	}
 
-	ring_buffer_get(&UART_tx_buffer, &UART_tx_temp);
+	ring_buffer_get(&UART_tx_ring_buffer, &UART_tx_temp);
 
 	HAL_UART_Transmit_IT(&huart2, &UART_tx_temp, 1);
 }
@@ -49,14 +58,14 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
  */
 void UART_SendData(uint8_t* data, uint16_t length) {
 	for(uint16_t i = 0; i < length; i++) {
-		ring_buffer_put(&UART_tx_buffer, data[i]);
+		ring_buffer_put(&UART_tx_ring_buffer, data[i]);
 	}
 
 	if(UART_tx_in_progress) return;
 
 	UART_tx_in_progress = 1;
 
-	ring_buffer_get(&UART_tx_buffer, &UART_tx_temp);
+	ring_buffer_get(&UART_tx_ring_buffer, &UART_tx_temp);
 	HAL_UART_Transmit_IT(&huart2, &UART_tx_temp, 1);
 }
 

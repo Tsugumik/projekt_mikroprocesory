@@ -7,17 +7,37 @@
 
 #ifndef INC_RING_BUFFER_H_
 #define INC_RING_BUFFER_H_
-#define BUFFER_SIZE 750
+
+#define DEFAULT_BUFFER_SIZE 1000
+#define SENSOR_BUFFER_SIZE 750
+#define UART_RX_BUFFER_SIZE 3000
+#define UART_TX_BUFFER_SIZE 3000
+
 #include "stdint.h"
 
 typedef struct {
-	uint8_t buffer[BUFFER_SIZE];
-	uint16_t head;
-	uint16_t tail;
+	// Wskaźnik na tablicę bufora
+	uint8_t* buffer;
+	// head - gdzie zapisywać dane
+	volatile uint16_t head;
+	// tail - gdzie czytać dane
+	volatile uint16_t tail;
+	// rozmiar bufora
 	uint16_t size;
 } RingBuffer_t;
 
-void ring_buffer_init(RingBuffer_t*);
+/*
+ * Inicjalizuje wszystkie bufory kołowe.
+ * KONIECZNIE należy wykonać w funkcji main
+ * przed wejściem do pętli while.
+ */
+void ring_buffer_init_all();
+
+/*
+ * Inicjalizuje bufor kołowy, przypisuje do niego
+ * tablicę i rozmiar.
+ */
+void ring_buffer_init(RingBuffer_t*, uint8_t*, uint16_t);
 
 // Sprawdza, czy bufor jest pusty
 uint8_t ring_buffer_is_empty(RingBuffer_t*);

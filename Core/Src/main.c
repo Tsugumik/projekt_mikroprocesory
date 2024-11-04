@@ -77,8 +77,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-  ring_buffer_init(&UART_rx_buffer);
-  ring_buffer_init(&UART_tx_buffer);
+  ring_buffer_init_all();
   /* USER CODE END Init */
 
   /* Configure the system clock */

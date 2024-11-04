@@ -13,11 +13,19 @@
 #include "ring_buffer.h"
 #include "communication_protocol.h"
 #include "string.h"
+#include "stdio.h"
 
 #define UART_RX_BUFF_LEN 750
 #define UART_TX_BUFF_LEN 750
 
+/*
+ * Wysyła dane w postaci bajtów o podanej ilości
+ */
 void UART_SendData(uint8_t*, uint16_t);
+
+/*
+ * Wysyła ciąg znaków
+ */
 void UART_SendText(const char*);
 
 #endif /* INC_UART_HANDLER_H_ */
