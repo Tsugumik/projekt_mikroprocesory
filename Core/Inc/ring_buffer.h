@@ -2,7 +2,7 @@
  * ring_buffer.h
  *
  *  Created on: Nov 3, 2024
- *      Author: drozd
+ *      Author: Błażej Drozd
  */
 
 #ifndef INC_RING_BUFFER_H_
@@ -39,7 +39,9 @@ void ring_buffer_init_all();
  */
 void ring_buffer_init(RingBuffer_t*, uint8_t*, uint16_t);
 
-// Sprawdza, czy bufor jest pusty
+/*
+ * USART_kbhit() - powinien działać tak samo
+ */
 uint8_t ring_buffer_is_empty(RingBuffer_t*);
 
 /*

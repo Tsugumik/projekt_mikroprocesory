@@ -2,7 +2,7 @@
  * uart_handler.h
  *
  *  Created on: Nov 3, 2024
- *      Author: drozd
+ *      Author: Błażej Drozd
  */
 
 #ifndef INC_UART_HANDLER_H_

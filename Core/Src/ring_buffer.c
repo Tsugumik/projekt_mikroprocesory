@@ -2,7 +2,7 @@
  * ring_buffer.c
  *
  *  Created on: Nov 3, 2024
- *      Author: drozd
+ *      Author: Błażej Drozd
  */
 
 #include "ring_buffer.h"
@@ -36,6 +36,7 @@ uint8_t ring_buffer_is_full(RingBuffer_t* rb) {
 	return ((rb->head + 1) % rb->size) == rb->tail;
 }
 
+// Zabezpieczyć krytyczne momenty przed wystąpieniem przerwania
 uint8_t ring_buffer_put(RingBuffer_t* rb, uint8_t data) {
 	if(ring_buffer_is_full(rb)) {
 		rb->tail = (rb->tail + 1) % rb->size;
