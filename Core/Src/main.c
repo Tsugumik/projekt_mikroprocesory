@@ -45,8 +45,6 @@
 
 /* USER CODE BEGIN PV */
 extern uint8_t UART_rx_temp;
-extern RingBuffer_t UART_rx_buffer;
-extern RingBuffer_t UART_tx_buffer;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -99,7 +97,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+	  TEST_received_data();
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
