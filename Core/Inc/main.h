@@ -32,6 +32,7 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ring_buffer.h"
+#include "communication_protocol.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/

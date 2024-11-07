@@ -97,7 +97,8 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  TEST_received_data();
+	  CP_receive_frame();
+	  //CP_process_frame_buffer();
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */

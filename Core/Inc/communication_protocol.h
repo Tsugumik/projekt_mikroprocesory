@@ -11,11 +11,23 @@
 #include "ring_buffer.h"
 #include "uart_handler.h"
 #include "stdio.h"
+#include "ctype.h"
 
 #define CP_START_CHAR 		0x7B
 #define CP_END_CHAR 		0x7D
 #define CP_ENCODE_CHAR 		0x5C
-#define CP_MAX_DATA_LEN		732
+#define CP_MAX_DATA_LEN		200
+#define CP_MIN_DATA_LEN		12
+
+typedef enum {
+	WAIT_FOR_START,
+	READ_SENDER_ID,
+	READ_RECEIVER_ID,
+	READ_DATA_LENGTH,
+	READ_DATA,
+	READ_CRC,
+	WAIT_FOR_END
+} FrameState;
 
 typedef struct {
 	uint8_t 	sender_id;
@@ -25,10 +37,13 @@ typedef struct {
 	uint32_t	crc;
 } Frame_t;
 
-void 	CP_encode_data(uint8_t*, uint8_t*, uint8_t, uint8_t*);
-void 	CP_decode_data(uint8_t*, uint8_t*, uint8_t, uint8_t*);
-void 	CP_process_frame_buffer(RingBuffer_t* frame_buffer, Frame_t* output_frame);
-uint8_t CP_validate_frame(Frame_t* frame);
+void 		CP_encode_data(uint8_t*, uint8_t*, uint8_t, uint8_t*);
+void 		CP_decode_data(uint8_t*, uint8_t*, uint8_t, uint8_t*);
+void 		CP_receive_frame();
+uint8_t 	CP_decode_received_frame(uint8_t*, uint8_t, Frame_t*);
+uint8_t		CP_2hex_to_byte(char, char);
+uint16_t	CP_hex_to_word(char, char, char, char);
+uint8_t 	CP_validate_frame(Frame_t* frame);
 
 /*
  * Funkcja do testowania działania UARTA
