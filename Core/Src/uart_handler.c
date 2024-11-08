@@ -57,7 +57,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 }
 
 /*
- * Funkcja do wysyłania pojedyńczych bajtów
+ * Funkcja do wysyłania bajtów
  */
 void UART_SendData(uint8_t* data, uint16_t length) {
 	__disable_irq();
