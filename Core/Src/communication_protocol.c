@@ -46,15 +46,26 @@ void CP_receive_frame() {
 
 		if(temp_byte == CP_END_CHAR) {
 			CP_Frame_t decoded_frame;
-			CP_StatusCode_t status;
+			CP_StatusCode_t decode_status;
 			char msg[100];
-			if((status = CP_decode_received_frame(frame_buffer, frame_index, &decoded_frame)) == DR_OK) {
-				// TODO: Dekodowanie ramki przebiegło pomyślnie, napisać przetwarzanie
-				snprintf(msg, sizeof(msg), "DECODE OK STATUS=%d\r\n", status);
+			if((decode_status = CP_decode_received_frame(frame_buffer, frame_index, &decoded_frame)) == DR_OK) {
+				snprintf(msg, sizeof(msg), "DECODE OK STATUS=%d\r\n", decode_status);
 				UART_SendText(msg);
+
+				CP_StatusCode_t validation_status;
+
+				if((validation_status = CP_validate_frame(&decoded_frame)) == V_OK) {
+					snprintf(msg, sizeof(msg), "VALIDATION OK STATUS=%d\r\n", validation_status);
+					UART_SendText(msg);
+					// TODO: Mamy pewność że ramka jest poprawna, można przetwarzać dane z ramki
+				} else {
+					snprintf(msg, sizeof(msg), "VALIDATION ERROR STATUS=%d\r\n", validation_status);
+					UART_SendText(msg);
+				}
+
 				return;
 			} else {
-				snprintf(msg, sizeof(msg), "DECODE ERROR STATUS=%d\r\n", status);
+				snprintf(msg, sizeof(msg), "DECODE ERROR STATUS=%d\r\n", decode_status);
 				UART_SendText(msg);
 				return;
 			}
@@ -249,5 +260,12 @@ CP_StatusCode_t CP_hex_to_word(char high1, char low1, char high2, char low2, uin
 	*output = (byte1 << 8) | byte2;
 
 	return HEX_OK;
+}
+
+CP_StatusCode_t CP_validate_frame(CP_Frame_t* frame) {
+	uint16_t calculated_crc = crc16_ansi(frame->data, frame->data_length);
+	if(calculated_crc != frame->crc) return V_CRC_ERROR;
+
+	return V_OK;
 }
 

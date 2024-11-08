@@ -12,6 +12,7 @@
 #include "uart_handler.h"
 #include "stdio.h"
 #include "ctype.h"
+#include "crc16_ansi.h"
 
 #define CP_START_CHAR 		0x7B
 #define CP_END_CHAR 		0x7D
@@ -71,7 +72,7 @@ void 			CP_receive_frame();
 CP_StatusCode_t CP_decode_received_frame(uint8_t*, uint8_t, CP_Frame_t*);
 CP_StatusCode_t	CP_2hex_to_byte(char, char, uint8_t*);
 CP_StatusCode_t	CP_hex_to_word(char, char, char, char, uint16_t*);
-uint8_t 		CP_validate_frame(CP_Frame_t* frame);
+CP_StatusCode_t CP_validate_frame(CP_Frame_t* frame);
 
 /*
  * Funkcja do testowania działania UARTA
