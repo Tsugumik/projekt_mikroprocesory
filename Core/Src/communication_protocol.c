@@ -52,11 +52,11 @@ void CP_receive_frame() {
 				// TODO: Dekodowanie ramki przebiegło pomyślnie, napisać przetwarzanie
 				snprintf(msg, sizeof(msg), "DECODE OK STATUS=%d\r\n", status);
 				UART_SendText(msg);
-				continue;
+				return;
 			} else {
 				snprintf(msg, sizeof(msg), "DECODE ERROR STATUS=%d\r\n", status);
 				UART_SendText(msg);
-				continue;
+				return;
 			}
 		}
 	}
@@ -126,18 +126,12 @@ CP_StatusCode_t CP_decode_received_frame(uint8_t* frame_buffer, uint8_t frame_le
 	 */
 
 	/*
-	 * Maksymalna ilość danych jakie można wczytać to
-	 * całkowita długość przesłanej ramki odjąć jej minimalna długość.
-	 * Jest to rzeczywista długość danych przesłanych w ramce.
+	 * Maksymalny indeks do jakiego można czytać dane.
+	 * Dalej znajduje się już CRC.
 	 */
-	uint16_t max_data_counter = frame_length - CP_MIN_FRAME_LEN;
-	/*
-	 * Jeśli powyższa wartość różni się od zadeklarowanej długości
-	 * danych należy zwrócić błąd
-	 */
-	if(max_data_counter != output->data_length) return DR_WRONG_DATA_LEN_PROVIDED_IN_FRAME;
+	uint16_t max_data_index = frame_length - CP_CRC_LEN - 1;
 
-	while(data_counter < output->data_length) {
+	while(data_counter < output->data_length && data_index < max_data_index) {
 		uint8_t temp_byte = frame_buffer[data_index];
 
 		if(decode_state == DS_READ_DATA) {
@@ -197,6 +191,20 @@ CP_StatusCode_t CP_decode_received_frame(uint8_t* frame_buffer, uint8_t frame_le
 	 * należy zwrócić błąd
 	 */
 	if(decode_state == DS_DECODE_NEXT_DATA) return DR_DATA_END_WHILE_DECODE;
+
+	/*
+	 * Jeśli licznik danych jest mniejszy od zadeklarowanej ilości
+	 * oznacza to, że przesłano mniej danych niż deklarowano
+	 * należy zwrócić błąd
+	 */
+	if(data_counter < output->data_length) return DR_DATA_LEN_TOO_SHORT;
+
+	/*
+	 * Nie zczytano wszystkich dostępnych danych
+	 * oznacza to, że przesłano więcej danych niż deklarowano
+	 * należy zwrócić błąd
+	 */
+	if(data_index != max_data_index) return DR_DATA_LEN_TOO_LONG;
 
 	// Jeśli dane zostały wczytane bez błędu, można zdekodować CRC
 
