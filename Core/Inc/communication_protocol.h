@@ -44,6 +44,10 @@ typedef enum {
 
 typedef enum {
 	DR_OK,
+	HEX_OK,
+	V_OK,
+	COMMAND_OK,
+	DR_RECEIVER_DIFF,
 	DR_WRONG_DATA_LEN_PROVIDED_IN_FRAME,
 	DR_DATA_LEN_TOO_SHORT,
 	DR_DATA_LEN_TOO_LONG,
@@ -51,12 +55,25 @@ typedef enum {
 	DR_DATA_END_WHILE_DECODE,
 	DR_FRAME_TOO_SHORT,
 	DR_RECEIVER_EQUAL_SENDER,
-	DR_RECEIVER_DIFF,
 	HEX_WRONG_CHAR,
-	HEX_OK,
-	V_OK,
-	V_CRC_ERROR
+	V_CRC_ERROR,
+	COMMAND_UNKNOWN,
+	COMMAND_EMPTY,
+	COMMAND_ARGUMENT_ERROR,
+	COMMAND_PARSE_ERROR,
+	COMMAND_ARGUMENT_TYPE_ERROR
 } CP_StatusCode_t;
+
+typedef enum {
+	DATA_OK,
+	STATUS_OK,
+	ERROR
+} CP_ResponseType_t;
+
+typedef enum {
+	SEND_OK,
+	GEN_OK,
+} CP_TX_StatusCode_t;
 
 typedef struct {
 	uint8_t 	sender_id;
@@ -66,13 +83,18 @@ typedef struct {
 	uint16_t	crc;
 } CP_Frame_t;
 
-void 			CP_encode_data(uint8_t*, uint8_t*, uint8_t, uint8_t*);
-void 			CP_decode_data(uint8_t*, uint8_t*, uint8_t, uint8_t*);
-void 			CP_receive_frame();
-CP_StatusCode_t CP_decode_received_frame(uint8_t*, uint8_t, CP_Frame_t*);
+void 				CP_receive_frame();
+CP_StatusCode_t 	CP_decode_received_frame(uint8_t*, uint8_t, CP_Frame_t*);
 CP_StatusCode_t	CP_2hex_to_byte(char, char, uint8_t*);
 CP_StatusCode_t	CP_hex_to_word(char, char, char, char, uint16_t*);
-CP_StatusCode_t CP_validate_frame(CP_Frame_t* frame);
+CP_StatusCode_t 	CP_validate_frame(CP_Frame_t* frame);
+
+CP_TX_StatusCode_t 	CP_send_frame(CP_Frame_t*);
+CP_TX_StatusCode_t	CP_gen_frame(const char*, uint8_t, CP_Frame_t*);
+void				CP_byte_to_2hex(uint8_t, uint8_t*);
+void 				CP_word_to_hex(uint16_t, uint8_t*);
+
+
 
 /*
  * Funkcja do testowania działania UARTA

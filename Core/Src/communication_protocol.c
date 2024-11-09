@@ -46,34 +46,35 @@ void CP_receive_frame() {
 
 		if(temp_byte == CP_END_CHAR) {
 			CP_Frame_t decoded_frame;
-			CP_StatusCode_t decode_status;
+			CP_RX_StatusCode_t decode_status;
 			char msg[100];
 			if((decode_status = CP_decode_received_frame(frame_buffer, frame_index, &decoded_frame)) == DR_OK) {
-				snprintf(msg, sizeof(msg), "DECODE OK STATUS=%d\r\n", decode_status);
-				UART_SendText(msg);
 
-				CP_StatusCode_t validation_status;
+				CP_RX_StatusCode_t validation_status;
 
 				if((validation_status = CP_validate_frame(&decoded_frame)) == V_OK) {
-					snprintf(msg, sizeof(msg), "VALIDATION OK STATUS=%d\r\n", validation_status);
-					UART_SendText(msg);
-					// TODO: Mamy pewność że ramka jest poprawna, można przetwarzać dane z ramki
+					// TODO: Ramka jest całkowicie prawidłowa i można przetwarzać przesłane dane
 				} else {
-					snprintf(msg, sizeof(msg), "VALIDATION ERROR STATUS=%d\r\n", validation_status);
-					UART_SendText(msg);
+					// Odesłanie błędu o błędnej sumie kontrolnej
+					return;
 				}
 
 				return;
 			} else {
-				snprintf(msg, sizeof(msg), "DECODE ERROR STATUS=%d\r\n", decode_status);
-				UART_SendText(msg);
+				// Odesłanie błędu o błędzie dekodowania ramki
+
+				/*
+				 * Jeśli status to DR_RECEIVER_DIFF
+				 * nie odpowiadaj na ramkę
+				 */
+
 				return;
 			}
 		}
 	}
 }
 
-CP_StatusCode_t CP_decode_received_frame(uint8_t* frame_buffer, uint8_t frame_length, CP_Frame_t* output) {
+CP_RX_StatusCode_t CP_decode_received_frame(uint8_t* frame_buffer, uint8_t frame_length, CP_Frame_t* output) {
 	/*
 	 * Jeśli długość wczytanej ramki jest mniejsza
 	 * niż jej minimalna długość
@@ -235,7 +236,7 @@ CP_StatusCode_t CP_decode_received_frame(uint8_t* frame_buffer, uint8_t frame_le
 	return DR_OK;
 }
 
-CP_StatusCode_t	CP_2hex_to_byte(char high, char low, uint8_t* output) {
+CP_RX_StatusCode_t	CP_2hex_to_byte(char high, char low, uint8_t* output) {
 	high = toupper(high);
 	low = toupper(low);
 
@@ -250,7 +251,7 @@ CP_StatusCode_t	CP_2hex_to_byte(char high, char low, uint8_t* output) {
 	return HEX_OK;
 }
 
-CP_StatusCode_t CP_hex_to_word(char high1, char low1, char high2, char low2, uint16_t* output) {
+CP_RX_StatusCode_t CP_hex_to_word(char high1, char low1, char high2, char low2, uint16_t* output) {
 	uint8_t byte1;
 	uint8_t byte2;
 
@@ -262,10 +263,89 @@ CP_StatusCode_t CP_hex_to_word(char high1, char low1, char high2, char low2, uin
 	return HEX_OK;
 }
 
-CP_StatusCode_t CP_validate_frame(CP_Frame_t* frame) {
+CP_RX_StatusCode_t CP_validate_frame(CP_Frame_t* frame) {
 	uint16_t calculated_crc = crc16_ansi(frame->data, frame->data_length);
 	if(calculated_crc != frame->crc) return V_CRC_ERROR;
 
 	return V_OK;
 }
 
+void CP_byte_to_2hex(uint8_t byte, uint8_t* out) {
+	sprintf((char*)out, "%02X", byte);
+}
+
+void CP_word_to_hex(uint16_t word, uint8_t* out) {
+	sprintf((char*)out, "%04X", word);
+}
+
+CP_TX_StatusCode_t CP_gen_frame(const char* data, uint8_t receiver, CP_Frame_t* out) {
+	size_t datalen = strlen(data);
+
+	if(datalen != CP_MAX_DATA_LEN);
+
+	// Kopiowanie danych do ramki
+	for(size_t i=0; i<datalen; i++) {
+		out->data[i] = data[i];
+	}
+
+	// Ustawianie pozostałych parametrów ramki
+	out->data_length = datalen;
+	out->sender_id = CP_STM_REC_ID;
+	out->receiver_id = receiver;
+
+	// Liczenie sumy kontrolnej
+	out->crc = crc16_ansi(out->data, out->data_length);
+
+	// Ramka gotowa do zakodowania i przesłania
+	return GEN_OK;
+}
+
+CP_TX_StatusCode_t CP_send_frame(CP_Frame_t* frame) {
+	uint8_t response_buff[CP_MAX_DATA_LEN*2 + CP_MIN_FRAME_LEN];
+	uint8_t response_index = 0;
+
+	response_buff[response_index++] = CP_START_CHAR;
+
+	CP_byte_to_2hex(frame->sender_id, &response_buff[response_index]);
+	response_index += 2;
+
+	CP_byte_to_2hex(frame->receiver_id, &response_buff[response_index]);
+	response_index += 2;
+
+	CP_byte_to_2hex(frame->data_length, &response_buff[response_index]);
+	response_index += 2;
+
+	uint16_t data_counter = 0;
+	uint8_t temp_byte;
+
+	while(data_counter < frame->data_length) {
+		temp_byte = frame->data[data_counter++];
+
+		switch(temp_byte) {
+			case CP_START_CHAR:
+				response_buff[response_index++] = CP_ENCODE_CHAR;
+				response_buff[response_index++] = CP_START_CODE_CHAR;
+				break;
+			case CP_END_CHAR:
+				response_buff[response_index++] = CP_ENCODE_CHAR;
+				response_buff[response_index++] = CP_END_CODE_CHAR;
+				break;
+			case CP_ENCODE_CHAR:
+				response_buff[response_index++] = CP_ENCODE_CHAR;
+				response_buff[response_index++] = CP_ENCODE_CODE_CHAR;
+				break;
+			default:
+				response_buff[response_index++] = temp_byte;
+				break;
+		}
+	}
+
+	CP_word_to_hex(frame->crc, &response_buff[response_index]);
+	response_index += 4;
+
+	response_buff[response_index] = CP_END_CHAR;
+
+	UART_SendData(response_buff, response_index+1);
+
+	return SEND_OK;
+}
