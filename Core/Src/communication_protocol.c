@@ -9,6 +9,7 @@
 
 extern RingBuffer_t UART_rx_ring_buffer;
 
+
 void TEST_received_data() {
 	while(!ring_buffer_is_empty(&UART_rx_ring_buffer)) {
 		uint8_t received_byte;
@@ -46,21 +47,29 @@ void CP_receive_frame() {
 
 		if(temp_byte == CP_END_CHAR) {
 			CP_Frame_t decoded_frame;
-			CP_RX_StatusCode_t decode_status;
-			char msg[100];
+			CP_StatusCode_t decode_status;
 			if((decode_status = CP_decode_received_frame(frame_buffer, frame_index, &decoded_frame)) == DR_OK) {
 
-				CP_RX_StatusCode_t validation_status;
+				CP_StatusCode_t validation_status;
 
 				if((validation_status = CP_validate_frame(&decoded_frame)) == V_OK) {
-					// TODO: Ramka jest całkowicie prawidłowa i można przetwarzać przesłane dane
+					CP_Command_t cmd;
+					CP_StatusCode_t command_status = CP_parse_command(&decoded_frame, &cmd);
+
+					if(command_status == COMMAND_OK) {
+						// Można wykonać komendę
+						CP_CMD_execute(&cmd, decoded_frame.sender_id);
+					} else {
+						CP_send_error_frame(command_status, decoded_frame.sender_id);
+					}
 				} else {
 					// Odesłanie błędu o błędnej sumie kontrolnej
+					CP_send_error_frame(validation_status, decoded_frame.sender_id);
 					return;
 				}
 
 				return;
-			} else {
+			} else if(decode_status != DR_RECEIVER_DIFF) {
 				// Odesłanie błędu o błędzie dekodowania ramki
 
 				/*
@@ -68,13 +77,14 @@ void CP_receive_frame() {
 				 * nie odpowiadaj na ramkę
 				 */
 
+				CP_send_error_frame(decode_status, decoded_frame.sender_id);
 				return;
 			}
 		}
 	}
 }
 
-CP_RX_StatusCode_t CP_decode_received_frame(uint8_t* frame_buffer, uint8_t frame_length, CP_Frame_t* output) {
+CP_StatusCode_t CP_decode_received_frame(uint8_t* frame_buffer, uint8_t frame_length, CP_Frame_t* output) {
 	/*
 	 * Jeśli długość wczytanej ramki jest mniejsza
 	 * niż jej minimalna długość
@@ -179,7 +189,7 @@ CP_RX_StatusCode_t CP_decode_received_frame(uint8_t* frame_buffer, uint8_t frame
 					decoded_byte = CP_END_CHAR;
 					break;
 				case CP_ENCODE_CODE_CHAR:
-					decoded_byte = CP_ENCODE_CODE_CHAR;
+					decoded_byte = CP_ENCODE_CHAR;
 					break;
 				default:
 					// Zwrócenie błędu o nieprawidłowym znaku kodowania
@@ -236,7 +246,7 @@ CP_RX_StatusCode_t CP_decode_received_frame(uint8_t* frame_buffer, uint8_t frame
 	return DR_OK;
 }
 
-CP_RX_StatusCode_t	CP_2hex_to_byte(char high, char low, uint8_t* output) {
+CP_StatusCode_t	CP_2hex_to_byte(char high, char low, uint8_t* output) {
 	high = toupper(high);
 	low = toupper(low);
 
@@ -251,7 +261,7 @@ CP_RX_StatusCode_t	CP_2hex_to_byte(char high, char low, uint8_t* output) {
 	return HEX_OK;
 }
 
-CP_RX_StatusCode_t CP_hex_to_word(char high1, char low1, char high2, char low2, uint16_t* output) {
+CP_StatusCode_t CP_hex_to_word(char high1, char low1, char high2, char low2, uint16_t* output) {
 	uint8_t byte1;
 	uint8_t byte2;
 
@@ -263,7 +273,7 @@ CP_RX_StatusCode_t CP_hex_to_word(char high1, char low1, char high2, char low2, 
 	return HEX_OK;
 }
 
-CP_RX_StatusCode_t CP_validate_frame(CP_Frame_t* frame) {
+CP_StatusCode_t CP_validate_frame(CP_Frame_t* frame) {
 	uint16_t calculated_crc = crc16_ansi(frame->data, frame->data_length);
 	if(calculated_crc != frame->crc) return V_CRC_ERROR;
 
@@ -348,4 +358,90 @@ CP_TX_StatusCode_t CP_send_frame(CP_Frame_t* frame) {
 	UART_SendData(response_buff, response_index+1);
 
 	return SEND_OK;
+}
+
+void CP_send_status_frame(uint8_t receiver) {
+	CP_Frame_t status_frame;
+	CP_gen_frame("A0", receiver, &status_frame);
+	CP_send_frame(&status_frame);
+}
+
+void CP_send_error_frame(CP_StatusCode_t status, uint8_t receiver) {
+	CP_Frame_t error_frame;
+
+	uint8_t frame_data_buff[CP_ERROR_FRAME_LEN + 1];
+
+	frame_data_buff[0] = 'F';
+	CP_byte_to_2hex(status, &frame_data_buff[1]);
+
+	frame_data_buff[CP_ERROR_FRAME_LEN] = '\0';
+
+	CP_gen_frame((const char*)frame_data_buff, receiver, &error_frame);
+	CP_send_frame(&error_frame);
+}
+
+CP_StatusCode_t	CP_parse_command(CP_Frame_t* frame, CP_Command_t* out) {
+	if(frame->data_length < 1) {
+		return COMMAND_EMPTY;
+	}
+
+	// Bufor na komendę
+
+	char command[CP_MAX_DATA_LEN + 1];
+
+	for(uint8_t i=0; i < frame->data_length; i++) {
+		command[i] = frame->data[i];
+	}
+
+	command[frame->data_length] = '\0';
+
+	// Poszukiwanie pozycji znaku (
+	const char* start_args = strchr(command, CP_ARG_START_CHAR);
+
+	if(!start_args) {
+		return COMMAND_PARSE_ERROR;
+	}
+
+	// Przekopiowanie nazwy do struktury komendy
+	strncpy(out->name, command, start_args - command);
+	out->name[start_args - command] = '\0';
+
+	// Poszukiwanie pozycji znaku )
+	const char* end_args = strchr(start_args, CP_ARG_END_CHAR);
+
+	if(!end_args) {
+		return COMMAND_PARSE_ERROR;
+	}
+
+	char args_copy[CP_MAX_DATA_LEN + 1];
+	strncpy(args_copy, start_args + 1, end_args - start_args - 1);
+	args_copy[end_args - start_args - 1] = '\0';
+
+	char* token = strtok(args_copy, CP_ARG_SPLIT_CHAR);
+	out->arg_count = 0;
+
+	while(token && out->arg_count < CP_MAX_COMMAND_ARG) {
+		out->arguments[out->arg_count++] = strdup(token);
+		token = strtok(NULL, CP_ARG_SPLIT_CHAR);
+	}
+
+	return COMMAND_OK;
+}
+
+void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
+	if(strcmp(cmd->name, "TOGGLELED") == 0) {
+		if(cmd->arg_count != 0) {
+			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
+		} else {
+			TOGGLELED();
+			CP_send_status_frame(receiver);
+		}
+	} else {
+		CP_send_error_frame(COMMAND_UNKNOWN, receiver);
+	}
+
+	// Zwalnianie przydzielonej pamięci przez strdup po jej wykonaniu
+	for (uint8_t i = 0; i < cmd->arg_count; i++) {
+		free(cmd->arguments[i]);
+	}
 }

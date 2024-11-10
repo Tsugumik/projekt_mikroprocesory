@@ -13,6 +13,8 @@
 #include "stdio.h"
 #include "ctype.h"
 #include "crc16_ansi.h"
+#include "commands.h"
+#include "stdlib.h"
 
 #define CP_START_CHAR 		0x7B
 #define CP_END_CHAR 		0x7D
@@ -22,6 +24,12 @@
 #define CP_DATA_START_IDX	7
 #define CP_STM_REC_ID		0xFF
 #define CP_CRC_LEN			4
+#define CP_ERROR_FRAME_LEN	3
+#define CP_MAX_COMMAND_ARG	10
+#define CP_ARG_START_CHAR	0x28
+#define CP_ARG_END_CHAR		0x29
+#define CP_ARG_SPLIT_CODE	0x2C
+#define CP_ARG_SPLIT_CHAR	","
 
 #define CP_START_CODE_CHAR	0x31
 #define CP_END_CODE_CHAR	0x32
@@ -65,9 +73,9 @@ typedef enum {
 } CP_StatusCode_t;
 
 typedef enum {
-	DATA_OK,
-	STATUS_OK,
-	ERROR
+	CP_DATA_OK,
+	CP_STATUS_OK,
+	CP_ERROR
 } CP_ResponseType_t;
 
 typedef enum {
@@ -83,17 +91,29 @@ typedef struct {
 	uint16_t	crc;
 } CP_Frame_t;
 
+typedef struct {
+	char name[32];
+	char* arguments[CP_MAX_COMMAND_ARG];
+	uint8_t arg_count;
+} CP_Command_t;
+
 void 				CP_receive_frame();
 CP_StatusCode_t 	CP_decode_received_frame(uint8_t*, uint8_t, CP_Frame_t*);
-CP_StatusCode_t	CP_2hex_to_byte(char, char, uint8_t*);
-CP_StatusCode_t	CP_hex_to_word(char, char, char, char, uint16_t*);
+CP_StatusCode_t		CP_2hex_to_byte(char, char, uint8_t*);
+CP_StatusCode_t		CP_hex_to_word(char, char, char, char, uint16_t*);
 CP_StatusCode_t 	CP_validate_frame(CP_Frame_t* frame);
+
+void				CP_send_status_frame(uint8_t);
+void				CP_send_error_frame(CP_StatusCode_t, uint8_t);
+void				CP_send_data_frame(const char*, uint8_t);
 
 CP_TX_StatusCode_t 	CP_send_frame(CP_Frame_t*);
 CP_TX_StatusCode_t	CP_gen_frame(const char*, uint8_t, CP_Frame_t*);
 void				CP_byte_to_2hex(uint8_t, uint8_t*);
 void 				CP_word_to_hex(uint16_t, uint8_t*);
 
+CP_StatusCode_t		CP_parse_command(CP_Frame_t*, CP_Command_t*);
+void 				CP_CMD_execute(CP_Command_t*, uint8_t);
 
 
 /*
