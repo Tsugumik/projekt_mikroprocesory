@@ -436,6 +436,12 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 			TOGGLELED();
 			CP_send_status_frame(receiver);
 		}
+	} else if(strcmp(cmd->name, "GETOK") == 0) {
+		if(cmd->arg_count != 0) {
+			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
+		} else {
+			CP_send_status_frame(receiver);
+		}
 	} else {
 		CP_send_error_frame(COMMAND_UNKNOWN, receiver);
 	}
