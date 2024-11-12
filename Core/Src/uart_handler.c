@@ -24,12 +24,8 @@ extern RingBuffer_t Sensor_ring_buffer;
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	if(huart->Instance != USART2) return;
 
-	__disable_irq();
-
 	// Wstawienie otrzymanych danych do bufora kołowego
 	ring_buffer_put(&UART_rx_ring_buffer, UART_rx_temp);
-
-	__enable_irq();
 
 	// Oczekiwanie na kolejne dane
 	HAL_UART_Receive_IT(&huart2, &UART_rx_temp, 1);
@@ -41,17 +37,12 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 	if(huart->Instance != USART2) return;
 
-	__disable_irq();
-
 	if(ring_buffer_is_empty(&UART_tx_ring_buffer)) {
 		UART_tx_in_progress = 0;
-		__enable_irq();
 		return;
 	}
 
 	ring_buffer_get(&UART_tx_ring_buffer, &UART_tx_temp);
-
-	__enable_irq();
 
 	HAL_UART_Transmit_IT(&huart2, &UART_tx_temp, 1);
 }
@@ -60,12 +51,13 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
  * Funkcja do wysyłania bajtów
  */
 void UART_SendData(uint8_t* data, uint16_t length) {
-	__disable_irq();
-
 	for(uint16_t i = 0; i < length; i++) {
+		__disable_irq();
 		ring_buffer_put(&UART_tx_ring_buffer, data[i]);
+		__enable_irq();
 	}
 
+	__disable_irq();
 	if(UART_tx_in_progress) {
 		__enable_irq();
 		return;
@@ -75,9 +67,9 @@ void UART_SendData(uint8_t* data, uint16_t length) {
 
 	ring_buffer_get(&UART_tx_ring_buffer, &UART_tx_temp);
 
-	__enable_irq();
-
 	HAL_UART_Transmit_IT(&huart2, &UART_tx_temp, 1);
+
+	__enable_irq();
 }
 
 /*
