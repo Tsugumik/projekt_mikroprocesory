@@ -9,7 +9,7 @@
 
 extern RingBuffer_t UART_rx_ring_buffer;
 
-
+// Do testowania, już nieaktualne
 void TEST_received_data() {
 	while(!ring_buffer_is_empty(&UART_rx_ring_buffer)) {
 		uint8_t received_byte;
@@ -27,248 +27,185 @@ void TEST_received_data() {
 }
 
 void CP_receive_frame() {
-	static uint8_t frame_buffer[CP_MAX_DATA_LEN*2 + CP_MIN_FRAME_LEN];
-	static uint8_t frame_index = 0;
-
-	uint8_t temp_byte;
+	static CP_FrameStatus_t read_state = CP_FS_WAIT_FOR_START_CHAR;
+	static CP_Frame_t frame;
+	static uint8_t data_count = 0;
+	static uint8_t temp;
 
 	while(!ring_buffer_is_empty(&UART_rx_ring_buffer)) {
+		uint8_t rx_temp;
+
 		__disable_irq();
-		ring_buffer_get(&UART_rx_ring_buffer, &temp_byte);
+		ring_buffer_get(&UART_rx_ring_buffer, &rx_temp);
 		__enable_irq();
 
-		if(temp_byte == CP_START_CHAR) {
-			frame_index = 0;
-		}
-
-		if(frame_index < sizeof(frame_buffer)) {
-			frame_buffer[frame_index++] = temp_byte;
-		}
-
-		if(temp_byte == CP_END_CHAR) {
-			CP_Frame_t decoded_frame;
-			CP_StatusCode_t decode_status;
-			if((decode_status = CP_decode_received_frame(frame_buffer, frame_index, &decoded_frame)) == DR_OK) {
-
-				CP_StatusCode_t validation_status;
-
-				if((validation_status = CP_validate_frame(&decoded_frame)) == V_OK) {
-					CP_Command_t cmd;
-					CP_StatusCode_t command_status = CP_parse_command(&decoded_frame, &cmd);
-
-					if(command_status == COMMAND_OK) {
-						// Można wykonać komendę
-						CP_CMD_execute(&cmd, decoded_frame.sender_id);
-					} else {
-						CP_send_error_frame(command_status, decoded_frame.sender_id);
-					}
+		if(rx_temp == CP_START_CHAR) {
+			data_count = 0;
+			read_state = CP_FS_WAIT_FOR_SENDER_BYTE1;
+			continue;
+		} else if(rx_temp == CP_END_CHAR && read_state != CP_FS_WAIT_FOR_END_CHAR) {
+			read_state = CP_FS_WAIT_FOR_START_CHAR;
+			continue;
+		} else if(read_state == CP_FS_WAIT_FOR_START_CHAR) {
+			// Ignoruj znaki jeśli oczekuje się znaku rozpoczęcia ramki
+			continue;
+		} else if(rx_temp == CP_END_CHAR && read_state == CP_FS_WAIT_FOR_END_CHAR) {
+			// RAMKA ODEBRANA, przetwarzaj
+			if(CP_validate_frame(&frame) == V_OK) {
+				CP_Command_t cmd;
+				if(CP_parse_command(&frame, &cmd) == COMMAND_OK) {
+					CP_CMD_execute(&cmd, frame.sender_id);
+					// TODO: Dodaj obsługę błędów komendy!
+					CP_send_status_frame(frame.sender_id);
 				} else {
-					// Odesłanie błędu o błędnej sumie kontrolnej
-					CP_send_error_frame(validation_status, decoded_frame.sender_id);
-					return;
+					CP_send_error_frame(COMMAND_PARSE_ERROR, frame.sender_id);
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+			} else {
+				read_state = CP_FS_WAIT_FOR_START_CHAR;
+			}
+
+			// Po przetworzeniu czekaj na następną
+			read_state = CP_FS_WAIT_FOR_START_CHAR;
+			continue;
+		}
+
+		switch(read_state) {
+			case CP_FS_WAIT_FOR_SENDER_BYTE1:
+				if(CP_hex_to_byte(rx_temp, &frame.sender_id) == HEX_OK) {
+					frame.sender_id <<= 4;
+					read_state = CP_FS_WAIT_FOR_SENDER_BYTE2;
+				} else {
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+				break;
+			case CP_FS_WAIT_FOR_SENDER_BYTE2:
+				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+					frame.sender_id |= temp;
+					read_state = CP_FS_WAIT_FOR_RECEIVER_BYTE1;
+				} else {
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+				break;
+			case CP_FS_WAIT_FOR_RECEIVER_BYTE1:
+				if(CP_hex_to_byte(rx_temp, &frame.receiver_id) == HEX_OK) {
+					frame.receiver_id <<= 4;
+					read_state = CP_FS_WAIT_FOR_RECEIVER_BYTE2;
+				} else {
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+				break;
+			case CP_FS_WAIT_FOR_RECEIVER_BYTE2:
+				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+					frame.receiver_id |= temp;
+					read_state = CP_FS_WAIT_FOR_DATALEN_BYTE1;
+				} else {
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+				break;
+			case CP_FS_WAIT_FOR_DATALEN_BYTE1:
+				if(CP_hex_to_byte(rx_temp, &frame.data_length) == HEX_OK) {
+					frame.data_length <<= 4;
+					read_state = CP_FS_WAIT_FOR_DATALEN_BYTE2;
+				} else {
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+				break;
+			case CP_FS_WAIT_FOR_DATALEN_BYTE2:
+				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+					frame.data_length |= temp;
+					if(frame.data_length > CP_MAX_DATA_LEN) {
+						read_state = CP_FS_WAIT_FOR_START_CHAR;
+						break;
+					}
+					read_state = frame.data_length > 0 ? CP_FS_READ_DATA : CP_FS_WAIT_FOR_CRC_BYTE1;
+				} else {
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+				break;
+			case CP_FS_READ_DATA:
+				if(rx_temp == CP_ENCODE_CHAR) {
+					read_state = CP_FS_DECODE_DATA;
+				} else {
+					frame.data[data_count] = rx_temp;
+					data_count++;
+					if(data_count == frame.data_length) {
+						read_state = CP_FS_WAIT_FOR_CRC_BYTE1;
+						break;
+					}
 				}
 
-				return;
-			} else if(decode_status != DR_RECEIVER_DIFF) {
-				// Odesłanie błędu o błędzie dekodowania ramki
-
-				/*
-				 * Jeśli status to DR_RECEIVER_DIFF
-				 * nie odpowiadaj na ramkę
-				 */
-
-				CP_send_error_frame(decode_status, decoded_frame.sender_id);
-				return;
-			}
+				break;
+			case CP_FS_DECODE_DATA:
+				if(CP_decode_byte(rx_temp, &frame.data[data_count]) == DECODE_OK) {
+					data_count++;
+					if(data_count == frame.data_length) {
+						read_state = CP_FS_WAIT_FOR_CRC_BYTE1;
+						break;
+					} else {
+						read_state = CP_FS_READ_DATA;
+					}
+				} else {
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+				break;
+			case CP_FS_WAIT_FOR_CRC_BYTE1:
+				if(CP_hex_to_2bytes(rx_temp, &frame.crc) == HEX_OK) {
+					frame.crc <<= 4;
+					read_state = CP_FS_WAIT_FOR_CRC_BYTE2;
+				} else {
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+				break;
+			case CP_FS_WAIT_FOR_CRC_BYTE2:
+				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+					frame.crc |= temp;
+					frame.crc <<= 4;
+					read_state = CP_FS_WAIT_FOR_CRC_BYTE3;
+				} else {
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+				break;
+			case CP_FS_WAIT_FOR_CRC_BYTE3:
+				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+					frame.crc |= temp;
+					frame.crc <<= 4;
+					read_state = CP_FS_WAIT_FOR_CRC_BYTE4;
+				} else {
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+				break;
+			case CP_FS_WAIT_FOR_CRC_BYTE4:
+				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+					frame.crc |= temp;
+					read_state = CP_FS_WAIT_FOR_END_CHAR;
+				} else {
+					read_state = CP_FS_WAIT_FOR_START_CHAR;
+				}
+				break;
+			default:
+				break;
 		}
 	}
 }
 
-CP_StatusCode_t CP_decode_received_frame(uint8_t* frame_buffer, uint8_t frame_length, CP_Frame_t* output) {
-	/*
-	 * Jeśli długość wczytanej ramki jest mniejsza
-	 * niż jej minimalna długość
-	 * zwróć błąd
-	 */
-	if(frame_length < CP_MIN_FRAME_LEN) return DR_FRAME_TOO_SHORT;
 
-	/*
-	 * Przełączenie w tryb czytania danych
-	 */
-	CP_DecodeState_t decode_state = DS_READ_DATA;
-
-	/*
-	 * Ilość wczytanych i zdekodowanych znaków
-	 */
-	uint16_t data_counter = 0;
-
-	/*
-	 * Dane zaczynają się od 7 pozycji
-	 */
-	uint16_t data_index = CP_DATA_START_IDX;
-
-	/*
-	 * Wczytywanie podstawowych informacji z ramki
-	 * Jeśli znaleziono w nich nieprawidłowe znaki
-	 * należy zwrócić błąd.
-	 */
-	if(CP_2hex_to_byte((char)frame_buffer[1], (char)frame_buffer[2], &output->sender_id) 	== HEX_WRONG_CHAR) return HEX_WRONG_CHAR;
-	if(CP_2hex_to_byte((char)frame_buffer[3], (char)frame_buffer[4], &output->receiver_id) 	== HEX_WRONG_CHAR) return HEX_WRONG_CHAR;
-	if(CP_2hex_to_byte((char)frame_buffer[5], (char)frame_buffer[6], &output->data_length) 	== HEX_WRONG_CHAR) return HEX_WRONG_CHAR;
-
-
-	/*
-	 * Jeśli id odbiorcy nie zgadza się z id płytki
-	 * należy przestać dekodować ramkę.
-	 */
-	if(output->receiver_id != CP_STM_REC_ID) return DR_RECEIVER_DIFF;
-
-	/*
-	 * Jeśli odbiorca równa się nadawcy
-	 * należy zwrócić błąd
-	 */
-	if(output->receiver_id == output->sender_id) return DR_RECEIVER_EQUAL_SENDER;
-
-	/*
-	 * Jeśli zadeklarowano więcej niż 200 znaków w polu danych
-	 * należy zwrócić błąd
-	 */
-	if(output->data_length > 200) return DR_WRONG_DATA_LEN_PROVIDED_IN_FRAME;
-
-	// Teraz można przystąpić do wczytywania danych
-
-	/*
-	 * Program przechodzi przez dane i zwiększa data_counter o 1
-	 * z każdym zdekodowanym znakiem.
-	 *
-	 * Znak zakodowany np. sekwencja \1 jest traktowana jako jeden znak
-	 * pomimo że zajmuje dwa miejsca w zakodowanej ramce.
-	 *
-	 * Zadeklarowana długość danych dotyczy danych niekodowanych.
-	 */
-
-	/*
-	 * Maksymalny indeks do jakiego można czytać dane.
-	 * Dalej znajduje się już CRC.
-	 */
-	uint16_t max_data_index = frame_length - CP_CRC_LEN - 1;
-
-	while(data_counter < output->data_length && data_index < max_data_index) {
-		uint8_t temp_byte = frame_buffer[data_index];
-
-		if(decode_state == DS_READ_DATA) {
-			/*
-			 * Jeśli podczas czytania danych napotkano
-			 * znak kodowania
-			 * należy go pominąć i przełączyć się
-			 * w tryb dekodowania danych
-			 */
-			if(temp_byte == CP_ENCODE_CHAR) {
-				decode_state = DS_DECODE_NEXT_DATA;
-				data_index++;
-				continue;
-			}
-
-			output->data[data_counter] = temp_byte;
-			data_index++;
-			data_counter++;
-			continue;
-		} else if(decode_state == DS_DECODE_NEXT_DATA) {
-			/*
-			 * W trybie dekodowania danych oczekujemy trzech
-			 * znaków: 1, 2 lub 3.
-			 * Jeśli otrzymamy inny, jest to błędnie
-			 * zakodowana ramka.
-			 */
-			uint8_t decoded_byte;
-			switch(temp_byte) {
-				case CP_START_CODE_CHAR:
-					decoded_byte = CP_START_CHAR;
-					break;
-				case CP_END_CODE_CHAR:
-					decoded_byte = CP_END_CHAR;
-					break;
-				case CP_ENCODE_CODE_CHAR:
-					decoded_byte = CP_ENCODE_CHAR;
-					break;
-				default:
-					// Zwrócenie błędu o nieprawidłowym znaku kodowania
-					return DR_WRONG_NEXT_CHARACTER;
-
-			}
-
-			// Zapisanie zdekodowanego znaku do ramki wyjściowej
-			output->data[data_counter] = decoded_byte;
-			data_counter++;
-			data_index++;
-			decode_state = DS_READ_DATA;
-			continue;
-		}
-	}
-
-	// Po zakończeniu przetwarzania danych sprawdź poprawność
-
-	/*
-	 * Jeśli zakończono wczytywać dane oczekując znaku do zdekodowania
-	 * należy zwrócić błąd
-	 */
-	if(decode_state == DS_DECODE_NEXT_DATA) return DR_DATA_END_WHILE_DECODE;
-
-	/*
-	 * Jeśli licznik danych jest mniejszy od zadeklarowanej ilości
-	 * oznacza to, że przesłano mniej danych niż deklarowano
-	 * należy zwrócić błąd
-	 */
-	if(data_counter < output->data_length) return DR_DATA_LEN_TOO_SHORT;
-
-	/*
-	 * Nie zczytano wszystkich dostępnych danych
-	 * oznacza to, że przesłano więcej danych niż deklarowano
-	 * należy zwrócić błąd
-	 */
-	if(data_index != max_data_index) return DR_DATA_LEN_TOO_LONG;
-
-	// Jeśli dane zostały wczytane bez błędu, można zdekodować CRC
-
-	/*
-	 * Jeśli CRC było niepoprawnie zakodowane
-	 * należy zwrócić błąd.
-	 */
-	if(CP_hex_to_word(	frame_buffer[data_index],
-						frame_buffer[data_index+1],
-						frame_buffer[data_index+2],
-						frame_buffer[data_index+3],
-						&output->crc) == HEX_WRONG_CHAR) {
+CP_StatusCode_t CP_hex_to_byte(char ch, uint8_t* out) {
+	if(!((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F'))) {
 		return HEX_WRONG_CHAR;
 	}
 
-	// Poprawnie zdekodowano całą ramkę
-	return DR_OK;
-}
-
-CP_StatusCode_t	CP_2hex_to_byte(char high, char low, uint8_t* output) {
-	high = toupper(high);
-	low = toupper(low);
-
-	if(!((high >= '0' && high <= '9') || (high >= 'A' && high <= 'F')) ||
-			!((low >= '0' && low <= '9') || (low >= 'A' && low <= 'F'))) {
-		return HEX_WRONG_CHAR;
-	}
-
-	*output = ((high >= 'A' ? high - 'A' + 10 : high - '0') << 4) |
-			(low >= 'A' ? low - 'A' + 10 : low - '0');
+	*out = (ch >= 'A' ? ch - 'A' + 10 : ch - '0');
 
 	return HEX_OK;
 }
 
-CP_StatusCode_t CP_hex_to_word(char high1, char low1, char high2, char low2, uint16_t* output) {
-	uint8_t byte1;
-	uint8_t byte2;
+CP_StatusCode_t CP_hex_to_2bytes(char ch, uint16_t* out) {
+	if(!((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F'))) {
+		return HEX_WRONG_CHAR;
+	}
 
-	if(CP_2hex_to_byte(high1, low1, &byte1) == HEX_WRONG_CHAR) return HEX_WRONG_CHAR;
-	if(CP_2hex_to_byte(high2, low2, &byte2) == HEX_WRONG_CHAR) return HEX_WRONG_CHAR;
-
-	*output = (byte1 << 8) | byte2;
+	*out = (ch >= 'A' ? ch - 'A' + 10 : ch - '0');
 
 	return HEX_OK;
 }
@@ -429,12 +366,22 @@ CP_StatusCode_t	CP_parse_command(CP_Frame_t* frame, CP_Command_t* out) {
 }
 
 void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
-	if(strcmp(cmd->name, "TOGGLELED") == 0) {
-		if(cmd->arg_count != 0) {
-			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
-		} else {
+	if(strcmp(cmd->name, "LED") == 0) {
+		if(cmd->arg_count == 0) {
 			TOGGLELED();
 			CP_send_status_frame(receiver);
+		} else if(cmd->arg_count == 1){
+			if(strcmp(cmd->arguments[0], "0") == 0) {
+				SETLED(0);
+				CP_send_status_frame(receiver);
+			} else if(strcmp(cmd->arguments[0], "1") == 0) {
+				SETLED(1);
+				CP_send_status_frame(receiver);
+			} else {
+				CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
+			}
+		} else {
+			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
 		}
 	} else if(strcmp(cmd->name, "GETOK") == 0) {
 		if(cmd->arg_count != 0) {
@@ -450,4 +397,22 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 	for (uint8_t i = 0; i < cmd->arg_count; i++) {
 		free(cmd->arguments[i]);
 	}
+}
+
+CP_StatusCode_t CP_decode_byte(uint8_t in, uint8_t* out) {
+	switch(in) {
+		case CP_START_CODE_CHAR:
+			*out = CP_START_CHAR;
+			break;
+		case CP_END_CODE_CHAR:
+			*out = CP_END_CHAR;
+			break;
+		case CP_ENCODE_CODE_CHAR:
+			*out = CP_ENCODE_CHAR;
+			break;
+		default:
+			return DECODE_ERROR;
+	}
+
+	return DECODE_OK;
 }

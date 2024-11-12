@@ -46,15 +46,12 @@ typedef enum {
 } FrameState;
 
 typedef enum {
-	DS_READ_DATA,
-	DS_DECODE_NEXT_DATA
-} CP_DecodeState_t;
-
-typedef enum {
 	DR_OK,
 	HEX_OK,
 	V_OK,
 	COMMAND_OK,
+	DECODE_OK,
+	DECODE_ERROR,
 	DR_RECEIVER_DIFF,
 	DR_WRONG_DATA_LEN_PROVIDED_IN_FRAME,
 	DR_DATA_LEN_TOO_SHORT,
@@ -97,11 +94,29 @@ typedef struct {
 	uint8_t arg_count;
 } CP_Command_t;
 
+typedef enum {
+	CP_FS_WAIT_FOR_START_CHAR,
+	CP_FS_WAIT_FOR_END_CHAR,
+	CP_FS_WAIT_FOR_SENDER_BYTE1,
+	CP_FS_WAIT_FOR_SENDER_BYTE2,
+	CP_FS_WAIT_FOR_RECEIVER_BYTE1,
+	CP_FS_WAIT_FOR_RECEIVER_BYTE2,
+	CP_FS_WAIT_FOR_DATALEN_BYTE1,
+	CP_FS_WAIT_FOR_DATALEN_BYTE2,
+	CP_FS_READ_DATA,
+	CP_FS_DECODE_DATA,
+	CP_FS_WAIT_FOR_CRC_BYTE1,
+	CP_FS_WAIT_FOR_CRC_BYTE2,
+	CP_FS_WAIT_FOR_CRC_BYTE3,
+	CP_FS_WAIT_FOR_CRC_BYTE4,
+	CP_FS_VALIDATE_CRC
+} CP_FrameStatus_t;
+
 void 				CP_receive_frame();
-CP_StatusCode_t 	CP_decode_received_frame(uint8_t*, uint8_t, CP_Frame_t*);
-CP_StatusCode_t		CP_2hex_to_byte(char, char, uint8_t*);
-CP_StatusCode_t		CP_hex_to_word(char, char, char, char, uint16_t*);
+CP_StatusCode_t 	CP_hex_to_byte(char, uint8_t*);
+CP_StatusCode_t 	CP_hex_to_2bytes(char, uint16_t*);
 CP_StatusCode_t 	CP_validate_frame(CP_Frame_t* frame);
+CP_StatusCode_t		CP_decode_byte(uint8_t, uint8_t*);
 
 void				CP_send_status_frame(uint8_t);
 void				CP_send_error_frame(CP_StatusCode_t, uint8_t);
@@ -114,6 +129,7 @@ void 				CP_word_to_hex(uint16_t, uint8_t*);
 
 CP_StatusCode_t		CP_parse_command(CP_Frame_t*, CP_Command_t*);
 void 				CP_CMD_execute(CP_Command_t*, uint8_t);
+
 
 
 /*
