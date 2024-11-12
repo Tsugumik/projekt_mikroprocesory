@@ -10,3 +10,7 @@
 void TOGGLELED() {
 	HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 }
+
+void SETLED(uint8_t status) {
+	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, status);
+}

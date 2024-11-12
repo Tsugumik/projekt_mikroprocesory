@@ -9,10 +9,9 @@
 #define INC_COMMANDS_H_
 
 #include "main.h"
-#include "commands.h"
-
 
 
 void TOGGLELED();
+void SETLED(uint8_t);
 
 #endif /* INC_COMMANDS_H_ */
