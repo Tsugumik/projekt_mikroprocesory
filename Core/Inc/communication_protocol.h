@@ -35,6 +35,9 @@
 #define CP_END_CODE_CHAR	0x32
 #define CP_ENCODE_CODE_CHAR	0x33
 
+#define CP_MAX_CMD_LEN		20
+#define CP_MAX_ARG_COUNT	20
+
 typedef enum {
 	WAIT_FOR_START,
 	READ_SENDER_ID,
@@ -66,7 +69,9 @@ typedef enum {
 	COMMAND_EMPTY,
 	COMMAND_ARGUMENT_ERROR,
 	COMMAND_PARSE_ERROR,
-	COMMAND_ARGUMENT_TYPE_ERROR
+	COMMAND_ARGUMENT_TYPE_ERROR,
+	COMMAND_NAME_OK,
+	COMMAND_NAME_ERROR
 } CP_StatusCode_t;
 
 typedef enum {
@@ -89,8 +94,8 @@ typedef struct {
 } CP_Frame_t;
 
 typedef struct {
-	char name[32];
-	char* arguments[CP_MAX_COMMAND_ARG];
+	char name[CP_MAX_CMD_LEN + 1];
+	char* arguments[CP_MAX_ARG_COUNT];
 	uint8_t arg_count;
 } CP_Command_t;
 
@@ -104,7 +109,6 @@ typedef enum {
 	CP_FS_WAIT_FOR_DATALEN_BYTE1,
 	CP_FS_WAIT_FOR_DATALEN_BYTE2,
 	CP_FS_READ_DATA,
-	CP_FS_DECODE_DATA,
 	CP_FS_WAIT_FOR_CRC_BYTE1,
 	CP_FS_WAIT_FOR_CRC_BYTE2,
 	CP_FS_WAIT_FOR_CRC_BYTE3,
@@ -129,6 +133,8 @@ void 				CP_word_to_hex(uint16_t, uint8_t*);
 
 CP_StatusCode_t		CP_parse_command(CP_Frame_t*, CP_Command_t*);
 void 				CP_CMD_execute(CP_Command_t*, uint8_t);
+
+void				CP_Free_mem(CP_Command_t*);
 
 
 

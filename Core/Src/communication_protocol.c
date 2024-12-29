@@ -8,6 +8,7 @@
 #include "communication_protocol.h"
 
 extern RingBuffer_t UART_rx_ring_buffer;
+extern uint32_t read_interval;
 
 // Do testowania, już nieaktualne
 void TEST_received_data() {
@@ -40,10 +41,12 @@ void CP_receive_frame() {
 		__enable_irq();
 
 		if(rx_temp == CP_START_CHAR) {
+			// Otrzymano znak początku ramki
 			data_count = 0;
 			read_state = CP_FS_WAIT_FOR_SENDER_BYTE1;
 			continue;
 		} else if(rx_temp == CP_END_CHAR && read_state != CP_FS_WAIT_FOR_END_CHAR) {
+			// Otrzymano znak końca ramki, który nie był oczekiwany
 			read_state = CP_FS_WAIT_FOR_START_CHAR;
 			continue;
 		} else if(read_state == CP_FS_WAIT_FOR_START_CHAR) {
@@ -52,11 +55,14 @@ void CP_receive_frame() {
 		} else if(rx_temp == CP_END_CHAR && read_state == CP_FS_WAIT_FOR_END_CHAR) {
 			// RAMKA ODEBRANA, przetwarzaj
 			if(CP_validate_frame(&frame) == V_OK) {
+				// Sprawdzanie CRC
 				CP_Command_t cmd;
 				if(CP_parse_command(&frame, &cmd) == COMMAND_OK) {
+					// Parsowanie komendy
+
+					// I na końcu jej wykonanie
 					CP_CMD_execute(&cmd, frame.sender_id);
 					// TODO: Dodaj obsługę błędów komendy!
-					CP_send_status_frame(frame.sender_id);
 				} else {
 					CP_send_error_frame(COMMAND_PARSE_ERROR, frame.sender_id);
 					read_state = CP_FS_WAIT_FOR_START_CHAR;
@@ -98,6 +104,13 @@ void CP_receive_frame() {
 			case CP_FS_WAIT_FOR_RECEIVER_BYTE2:
 				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
 					frame.receiver_id |= temp;
+
+					// Sprawdzanie czy odbiorca się zgadza
+					if(frame.receiver_id != CP_STM_REC_ID) {
+						read_state = CP_FS_WAIT_FOR_START_CHAR;
+						break;
+					}
+
 					read_state = CP_FS_WAIT_FOR_DATALEN_BYTE1;
 				} else {
 					read_state = CP_FS_WAIT_FOR_START_CHAR;
@@ -118,33 +131,31 @@ void CP_receive_frame() {
 						read_state = CP_FS_WAIT_FOR_START_CHAR;
 						break;
 					}
+
+					// Jeśli zadeklarowano 0 danych, odrzuć ramkę
 					read_state = frame.data_length > 0 ? CP_FS_READ_DATA : CP_FS_WAIT_FOR_CRC_BYTE1;
 				} else {
 					read_state = CP_FS_WAIT_FOR_START_CHAR;
 				}
 				break;
 			case CP_FS_READ_DATA:
-				if(rx_temp == CP_ENCODE_CHAR) {
-					read_state = CP_FS_DECODE_DATA;
-				} else {
+				// Odbiór danych
+				if((rx_temp >= 0x41 && rx_temp <= 0x5A) || (rx_temp >= 0x30 && rx_temp <= 0x39) || (rx_temp == 0x28 || rx_temp == 0x29 || rx_temp == 0x2C)) {
+					/*
+					 * Dopuszczone są tylko znaki
+					 * - A do Z (od 0x41 do 0x5A)
+					 * - 0 do 9 (od 0x30 do 0x39)
+					 * - "(" (0x28)
+					 * - ")" (0x29)
+					 * - "," (0x2C)
+					 *
+					 * Jeśli pojawi się bajt o innej wartości, ramka jest
+					 * odrzucana
+					 */
 					frame.data[data_count] = rx_temp;
 					data_count++;
-					if(data_count == frame.data_length) {
-						read_state = CP_FS_WAIT_FOR_CRC_BYTE1;
-						break;
-					}
-				}
 
-				break;
-			case CP_FS_DECODE_DATA:
-				if(CP_decode_byte(rx_temp, &frame.data[data_count]) == DECODE_OK) {
-					data_count++;
-					if(data_count == frame.data_length) {
-						read_state = CP_FS_WAIT_FOR_CRC_BYTE1;
-						break;
-					} else {
-						read_state = CP_FS_READ_DATA;
-					}
+					if(data_count == frame.data_length) read_state = CP_FS_WAIT_FOR_CRC_BYTE1;
 				} else {
 					read_state = CP_FS_WAIT_FOR_START_CHAR;
 				}
@@ -317,31 +328,47 @@ void CP_send_error_frame(CP_StatusCode_t status, uint8_t receiver) {
 	CP_send_frame(&error_frame);
 }
 
+CP_StatusCode_t CP_is_command_name_valid(const char* name) {
+
+	for(size_t i = 0; i < strlen(name); i++) {
+		if(!(name[i] >= 0x41 && name[i] <= 0x5A)) return COMMAND_NAME_ERROR;
+	}
+
+	return COMMAND_NAME_OK;
+}
+
 CP_StatusCode_t	CP_parse_command(CP_Frame_t* frame, CP_Command_t* out) {
 	if(frame->data_length < 1) {
 		return COMMAND_EMPTY;
 	}
 
-	// Bufor na komendę
-
+	// Konwertowanie danych na string
 	char command[CP_MAX_DATA_LEN + 1];
-
-	for(uint8_t i=0; i < frame->data_length; i++) {
-		command[i] = frame->data[i];
-	}
-
+	memcpy(command, frame->data, frame->data_length);
 	command[frame->data_length] = '\0';
 
 	// Poszukiwanie pozycji znaku (
 	const char* start_args = strchr(command, CP_ARG_START_CHAR);
 
 	if(!start_args) {
+		// Jeśli nie znaleziono - komenda niepoprawna
 		return COMMAND_PARSE_ERROR;
 	}
 
+	// Sprawdzanie długości komendy
+	size_t name_len = start_args - command;
+	if(name_len > CP_MAX_CMD_LEN || name_len == 0) {
+		return COMMAND_NAME_ERROR;
+	}
+
 	// Przekopiowanie nazwy do struktury komendy
-	strncpy(out->name, command, start_args - command);
+	strncpy(out->name, command, name_len);
 	out->name[start_args - command] = '\0';
+
+	// Sprawdzanie nazwy (wielkości liter)
+	if(!CP_is_command_name_valid(out->name)) {
+		return COMMAND_NAME_ERROR;
+	}
 
 	// Poszukiwanie pozycji znaku )
 	const char* end_args = strchr(start_args, CP_ARG_END_CHAR);
@@ -350,49 +377,124 @@ CP_StatusCode_t	CP_parse_command(CP_Frame_t* frame, CP_Command_t* out) {
 		return COMMAND_PARSE_ERROR;
 	}
 
-	char args_copy[CP_MAX_DATA_LEN + 1];
-	strncpy(args_copy, start_args + 1, end_args - start_args - 1);
-	args_copy[end_args - start_args - 1] = '\0';
+	size_t args_len = end_args - start_args - 1;
+	if(args_len > CP_MAX_DATA_LEN) {
+		return COMMAND_PARSE_ERROR;
+	}
 
-	char* token = strtok(args_copy, CP_ARG_SPLIT_CHAR);
+	char args_copy[CP_MAX_DATA_LEN + 1];
+	strncpy(args_copy, start_args + 1, args_len);
+
+	args_copy[args_len] = '\0';
+
+	char* token;
+	char* rest = args_copy;
+
 	out->arg_count = 0;
 
-	while(token && out->arg_count < CP_MAX_COMMAND_ARG) {
-		out->arguments[out->arg_count++] = strdup(token);
-		token = strtok(NULL, CP_ARG_SPLIT_CHAR);
+	while((token = strtok_r(rest, CP_ARG_SPLIT_CHAR, &rest)) && out->arg_count < CP_MAX_ARG_COUNT) {
+		out->arguments[out->arg_count] = strdup(token);
+
+		if(out->arguments[out->arg_count] == NULL) {
+			// Obsługa błędu alokacji pamięci
+			CP_Free_mem(out);
+
+			return COMMAND_PARSE_ERROR;
+		}
+
+		out->arg_count++;
+	}
+
+	if(token != NULL) {
+		// Zbyt wiele argumentów
+		CP_Free_mem(out);
+
+		return COMMAND_PARSE_ERROR;
 	}
 
 	return COMMAND_OK;
 }
 
 void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
-	if(strcmp(cmd->name, "LED") == 0) {
+	if(strcmp(cmd->name, "GETOK") == 0) {
 		if(cmd->arg_count == 0) {
-			TOGGLELED();
 			CP_send_status_frame(receiver);
-		} else if(cmd->arg_count == 1){
-			if(strcmp(cmd->arguments[0], "0") == 0) {
-				SETLED(0);
-				CP_send_status_frame(receiver);
-			} else if(strcmp(cmd->arguments[0], "1") == 0) {
-				SETLED(1);
-				CP_send_status_frame(receiver);
-			} else {
+		} else {
+			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
+		}
+	} else if(strcmp(cmd->name, "SETINTERVAL") == 0) {
+		if(cmd->arg_count == 1) {
+			uint32_t interval = 0;
+			uint8_t result;
+
+			uint8_t i = 0;
+
+			uint8_t hex_len = strlen(cmd->arguments[0]);
+
+			if(hex_len > 8) {
+				CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
+				CP_Free_mem(cmd);
+				return;
+			} else if(hex_len == 1 && cmd->arguments[0][i] == '0') {
 				CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
+				CP_Free_mem(cmd);
+				return;
+			}
+
+			if((CP_hex_to_byte(cmd->arguments[0][i], &result)) != HEX_OK) {
+				CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
+				CP_Free_mem(cmd);
+				return;
+			} else {
+				interval |= result;
+			}
+
+			i++;
+
+			for(;i < hex_len; i++) {
+
+				if((CP_hex_to_byte(cmd->arguments[0][i], &result)) != HEX_OK) {
+					CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
+					CP_Free_mem(cmd);
+					return;
+				}
+
+				interval <<= 4;
+				interval |= result;
+			}
+
+			read_interval = interval;
+			CP_send_status_frame(receiver);
+		} else {
+			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
+		}
+	} else if(strcmp(cmd->name, "SETSCREEN") == 0) {
+		if(cmd->arg_count == 1) {
+			// TODO: Ustawiać flagę statusu wyświetlacza
+			switch(cmd->arguments[0][0]) {
+				case '0':
+					CP_send_status_frame(receiver);
+				break;
+				case '1':
+					CP_send_status_frame(receiver);
+				break;
+				default:
+					CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
 			}
 		} else {
 			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
 		}
-	} else if(strcmp(cmd->name, "GETOK") == 0) {
-		if(cmd->arg_count != 0) {
-			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
-		} else {
-			CP_send_status_frame(receiver);
-		}
 	} else {
 		CP_send_error_frame(COMMAND_UNKNOWN, receiver);
+		CP_Free_mem(cmd);
+		return;
 	}
 
+	CP_Free_mem(cmd);
+
+}
+
+void CP_Free_mem(CP_Command_t* cmd) {
 	// Zwalnianie przydzielonej pamięci przez strdup po jej wykonaniu
 	for (uint8_t i = 0; i < cmd->arg_count; i++) {
 		free(cmd->arguments[i]);
