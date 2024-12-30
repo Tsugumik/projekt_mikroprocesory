@@ -15,6 +15,8 @@ volatile static AHT20_MainState state = AHT20_STATE_JUST_TURNED_ON;
 volatile uint32_t TIM10_time_elapsed = 0;
 volatile uint8_t aht20_i2c_transfer_complete = 0;
 
+uint32_t read_interval = 1000;
+
 float temperature;
 float humidity;
 
@@ -88,8 +90,7 @@ void AHT20_MainStateMachine() {
 				uint32_t raw_humidity_20bit = (rx_buffer[1]) << 12 | (rx_buffer[2]) << 4 | (rx_buffer[3]) >> 4;
 				uint32_t raw_temperature_20bit = (rx_buffer[3] & 0x0F) << 16 | (rx_buffer[4]) << 8 | (rx_buffer[5]);
 
-				humidity = raw_humidity_20bit / 10485.76;
-				temperature = (raw_temperature_20bit / 1048576.0)*200.0 - 50.0;
+				SCREEN_DisplayTempAndHumidity(&raw_temperature_20bit, &raw_humidity_20bit);
 
 				state = AHT20_STATE_IDLE;
 			}
