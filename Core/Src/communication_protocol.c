@@ -9,6 +9,8 @@
 
 extern RingBuffer_t UART_rx_ring_buffer;
 extern uint32_t read_interval;
+extern I2C_HandleTypeDef hi2c1;
+extern SCREEN_TempUnits_t tempUnit;
 
 // Do testowania, już nieaktualne
 void TEST_received_data() {
@@ -473,13 +475,39 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 			// TODO: Ustawiać flagę statusu wyświetlacza
 			switch(cmd->arguments[0][0]) {
 				case '0':
+					SCREEN_SetStatus(SCREEN_OFF);
 					CP_send_status_frame(receiver);
 				break;
 				case '1':
+					SCREEN_SetStatus(SCREEN_ON);
 					CP_send_status_frame(receiver);
 				break;
 				default:
 					CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
+					break;
+			}
+		} else {
+			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
+		}
+	} else if(strcmp(cmd->name, "SETTEMPUNIT") == 0) {
+		if(cmd->arg_count == 1) {
+			// TODO: Ustawiać flagę statusu wyświetlacza
+			switch(cmd->arguments[0][0]) {
+				case '0':
+					tempUnit = SCREEN_TempUnit_C;
+					CP_send_status_frame(receiver);
+				break;
+				case '1':
+					tempUnit = SCREEN_TempUnit_F;
+					CP_send_status_frame(receiver);
+				break;
+				case '2':
+					tempUnit = SCREEN_TempUnit_K;
+					CP_send_status_frame(receiver);
+					break;
+				default:
+					CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
+					break;
 			}
 		} else {
 			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
@@ -491,7 +519,6 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 	}
 
 	CP_Free_mem(cmd);
-
 }
 
 void CP_Free_mem(CP_Command_t* cmd) {

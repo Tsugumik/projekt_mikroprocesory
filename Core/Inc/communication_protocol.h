@@ -15,6 +15,7 @@
 #include "crc16_ansi.h"
 #include "commands.h"
 #include "stdlib.h"
+#include "screen.h"
 
 #define CP_START_CHAR 		0x7B
 #define CP_END_CHAR 		0x7D
@@ -73,6 +74,11 @@ typedef enum {
 	COMMAND_NAME_OK,
 	COMMAND_NAME_ERROR
 } CP_StatusCode_t;
+
+typedef enum {
+	RFS_COMMAND_UNKNOWN,
+	RFS_COMMAND_ARGUMENT_COUNT_INVALID
+} CP_ReturnFrameStatus_t;
 
 typedef enum {
 	CP_DATA_OK,
