@@ -92,8 +92,11 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   MX_TIM10_Init();
+  MX_TIM11_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_IT(&huart2, &UART_rx_temp, 1);
+  ssd1306_Init();
+  HAL_TIM_Base_Start_IT(&htim11);
   /* USER CODE END 2 */
 
   /* Infinite loop */
