@@ -96,7 +96,7 @@ void AHT20_MainStateMachine() {
 				uint32_t raw_humidity_20bit = (rx_buffer[1]) << 12 | (rx_buffer[2]) << 4 | (rx_buffer[3]) >> 4;
 				uint32_t raw_temperature_20bit = (rx_buffer[3] & 0x0F) << 16 | (rx_buffer[4]) << 8 | (rx_buffer[5]);
 
-				SCREEN_DisplayTempAndHumidity(&raw_temperature_20bit, &raw_humidity_20bit);
+				SCREEN_CalculateValues(&raw_temperature_20bit, &raw_humidity_20bit);
 
 				state = AHT20_STATE_IDLE;
 			}

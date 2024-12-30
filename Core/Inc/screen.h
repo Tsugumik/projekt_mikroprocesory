@@ -20,7 +20,8 @@ typedef enum {
 	SCREEN_OFF, SCREEN_ON
 } SCREEN_Status_t;
 
-void SCREEN_DisplayTempAndHumidity(uint32_t* temp20bit, uint32_t* humidity20bit);
+void SCREEN_CalculateValues(uint32_t* temp20bit, uint32_t* humidity20bit);
 void SCREEN_SetStatus(SCREEN_Status_t status);
+void SCREEN_Update();
 
 #endif /* INC_SCREEN_H_ */

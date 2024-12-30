@@ -495,14 +495,17 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 			switch(cmd->arguments[0][0]) {
 				case '0':
 					tempUnit = SCREEN_TempUnit_C;
+					SCREEN_Update();
 					CP_send_status_frame(receiver);
 				break;
 				case '1':
 					tempUnit = SCREEN_TempUnit_F;
+					SCREEN_Update();
 					CP_send_status_frame(receiver);
 				break;
 				case '2':
 					tempUnit = SCREEN_TempUnit_K;
+					SCREEN_Update();
 					CP_send_status_frame(receiver);
 					break;
 				default:
