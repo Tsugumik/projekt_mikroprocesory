@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "i2c.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -90,6 +91,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_I2C1_Init();
+  MX_TIM10_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_IT(&huart2, &UART_rx_temp, 1);
   /* USER CODE END 2 */
@@ -102,6 +104,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	  CP_receive_frame();
+	  AHT20_MainStateMachine();
   }
   /* USER CODE END 3 */
 }

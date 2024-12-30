@@ -33,6 +33,7 @@ extern "C" {
 /* USER CODE BEGIN Includes */
 #include "ring_buffer.h"
 #include "communication_protocol.h"
+#include "AHT20.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
