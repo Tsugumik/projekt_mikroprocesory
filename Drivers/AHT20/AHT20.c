@@ -10,9 +10,12 @@
 
 extern I2C_HandleTypeDef hi2c1;
 extern TIM_HandleTypeDef htim10;
+extern TIM_HandleTypeDef htim11;
 
 volatile static AHT20_MainState state = AHT20_STATE_JUST_TURNED_ON;
 volatile uint32_t TIM10_time_elapsed = 0;
+volatile uint32_t TIM11_time_elapsed = 0;
+volatile uint32_t last_measurement_time = 0;
 volatile uint8_t aht20_i2c_transfer_complete = 0;
 
 uint32_t read_interval = 1000;
@@ -69,11 +72,14 @@ void AHT20_MainStateMachine() {
 			}
 			break;
 		case AHT20_STATE_IDLE:
-			aht20_i2c_transfer_complete = 0;
-			HAL_I2C_Master_Transmit_IT(&hi2c1, AHT20_DEV_ADDRESS_TRANSMIT, measure_cmd, 3);
-			TIM10_time_elapsed = 0;
-			HAL_TIM_Base_Start_IT(&htim10);
-			state = AHT20_STATE_WAIT_FOR_MEASURE_COMPLETE;
+			if(TIM11_time_elapsed - last_measurement_time >= read_interval) {
+				last_measurement_time = TIM11_time_elapsed;
+				aht20_i2c_transfer_complete = 0;
+				HAL_I2C_Master_Transmit_IT(&hi2c1, AHT20_DEV_ADDRESS_TRANSMIT, measure_cmd, 3);
+				TIM10_time_elapsed = 0;
+				HAL_TIM_Base_Start_IT(&htim10);
+				state = AHT20_STATE_WAIT_FOR_MEASURE_COMPLETE;
+			}
 			break;
 		case AHT20_STATE_WAIT_FOR_MEASURE_COMPLETE:
 			if (TIM10_time_elapsed >= 80) {
@@ -113,6 +119,8 @@ void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef* hi2c) {
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
   if (htim->Instance == TIM10) {
 	  TIM10_time_elapsed++;
+  } else if(htim->Instance == TIM11) {
+	  TIM11_time_elapsed++;
   }
 }
 

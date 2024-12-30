@@ -10,6 +10,7 @@
 #define AHT20_H_
 
 #include "stm32f4xx_hal.h"
+#include "screen.h"
 
 #ifdef __cplusplus
 extern "C" {
