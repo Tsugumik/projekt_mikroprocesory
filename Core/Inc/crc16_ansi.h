@@ -9,6 +9,7 @@
 #define INC_CRC16_ANSI_H_
 
 #include "stdint.h"
+#include "stdio.h"
 
 #define CRC_POLY 0x8005
 #define CRC_INIT 0x0000
