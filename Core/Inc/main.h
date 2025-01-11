@@ -32,6 +32,7 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ring_buffer.h"
+#include "ring_buffer32.h"
 #include "communication_protocol.h"
 #include "AHT20.h"
 #include "ssd1306.h"

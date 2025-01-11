@@ -9,16 +9,13 @@
 
 uint8_t uart_rx_buff[UART_RX_BUFFER_SIZE];
 uint8_t uart_tx_buff[UART_TX_BUFFER_SIZE];
-uint8_t sensor_buff[SENSOR_BUFFER_SIZE];
 
 RingBuffer_t UART_rx_ring_buffer;
 RingBuffer_t UART_tx_ring_buffer;
-RingBuffer_t Sensor_ring_buffer;
 
 void ring_buffer_init_all() {
 	ring_buffer_init(&UART_rx_ring_buffer, uart_rx_buff, UART_RX_BUFFER_SIZE);
 	ring_buffer_init(&UART_tx_ring_buffer, uart_tx_buff, UART_TX_BUFFER_SIZE);
-	ring_buffer_init(&Sensor_ring_buffer, sensor_buff, SENSOR_BUFFER_SIZE);
 }
 
 void ring_buffer_init(RingBuffer_t* rb, uint8_t* buffer, uint16_t size) {
