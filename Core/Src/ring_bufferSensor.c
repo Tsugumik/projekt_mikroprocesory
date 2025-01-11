@@ -5,7 +5,7 @@
  *      Author: drozd
  */
 
-#include <ring_bufferSensor.h>
+#include "ring_bufferSensor.h"
 
 Sensor_RawData_t sensor_buffer[SENSOR_BUFFER_SIZE];
 
