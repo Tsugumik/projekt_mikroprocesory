@@ -5,41 +5,46 @@
  *      Author: Błażej Drozd
  */
 
-#ifndef INC_RING_BUFFER32_H_
-#define INC_RING_BUFFER32_H_
+#ifndef INC_RING_BUFFERSENSOR_H_
+#define INC_RING_BUFFERSENSOR_H_
 
 #define SENSOR_BUFFER_SIZE 750
 
 #include "stdint.h"
 
 typedef struct {
+	uint32_t temperature;
+	uint32_t humidity;
+} Sensor_RawData_t;
+
+typedef struct {
 	// Wskaźnik na tablicę bufora
-	uint32_t* buffer;
+	Sensor_RawData_t* buffer;
 	// head - gdzie zapisywać dane
 	volatile uint16_t head;
 	// tail - gdzie czytać dane
 	volatile uint16_t tail;
 	// rozmiar bufora
 	uint16_t size;
-} RingBuffer32_t;
+} RingBufferSensor_RawData_t;
 
 /*
  * Inicjalizuje wszystkie bufory kołowe.
  * KONIECZNIE należy wykonać w funkcji main
  * przed wejściem do pętli while.
  */
-void ring_buffer32_init_all();
+void ring_bufferSensor_init_all();
 
 /*
  * Inicjalizuje bufor kołowy, przypisuje do niego
  * tablicę i rozmiar.
  */
-void ring_buffer32_init(RingBuffer32_t*, uint32_t*, uint16_t);
+void ring_bufferSensor_init(RingBufferSensor_RawData_t*, Sensor_RawData_t*, uint16_t);
 
 /*
  * USART_kbhit() - powinien działać tak samo
  */
-uint8_t ring_buffer32_is_empty(RingBuffer32_t*);
+uint8_t ring_bufferSensor_is_empty(RingBufferSensor_RawData_t*);
 
 /*
  * Sprawdza, czy bufor jest pełny.
@@ -47,12 +52,12 @@ uint8_t ring_buffer32_is_empty(RingBuffer32_t*);
  * Dzięki operatorowi %, head wróci na początek bufora, gdy
  * przekroczy rozmiar bufora, czyli tworzy efekt "zawijania".
  */
-uint8_t ring_buffer32_is_full(RingBuffer32_t*);
+uint8_t ring_bufferSensor_is_full(RingBufferSensor_RawData_t*);
 
 // Dodaje bajt do bufora
-uint8_t ring_buffer32_put(RingBuffer32_t*, uint32_t);
+uint8_t ring_bufferSensor_put(RingBufferSensor_RawData_t*, Sensor_RawData_t);
 
 // Pobiera bajt z bufora
-uint8_t ring_buffer32_get(RingBuffer32_t*, uint32_t*);
+uint8_t ring_bufferSensor_get(RingBufferSensor_RawData_t*, Sensor_RawData_t*);
 
-#endif /* INC_RING_BUFFER32_H_ */
+#endif /* INC_RING_BUFFERSENSOR_H_ */

@@ -78,7 +78,7 @@ int main(void)
 
   /* USER CODE BEGIN Init */
   ring_buffer_init_all();
-  ring_buffer32_init_all();
+  ring_bufferSensor_init_all();
   /* USER CODE END Init */
 
   /* Configure the system clock */
