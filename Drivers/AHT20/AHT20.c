@@ -18,6 +18,8 @@ volatile uint32_t TIM11_time_elapsed = 0;
 volatile uint32_t last_measurement_time = 0;
 volatile uint8_t aht20_i2c_transfer_complete = 0;
 
+extern RingBufferSensor_RawData_t SENSOR_ring_buffer;
+
 uint32_t read_interval = 1000;
 
 float temperature;
@@ -93,10 +95,16 @@ void AHT20_MainStateMachine() {
 			if(aht20_i2c_transfer_complete){
 				aht20_i2c_transfer_complete = 0;
 
-				uint32_t raw_humidity_20bit = (rx_buffer[1]) << 12 | (rx_buffer[2]) << 4 | (rx_buffer[3]) >> 4;
-				uint32_t raw_temperature_20bit = (rx_buffer[3] & 0x0F) << 16 | (rx_buffer[4]) << 8 | (rx_buffer[5]);
+				Sensor_RawData_t sensor_RawData;
 
-				SCREEN_CalculateValues(&raw_temperature_20bit, &raw_humidity_20bit);
+				sensor_RawData.humidity = (rx_buffer[1]) << 12 | (rx_buffer[2]) << 4 | (rx_buffer[3]) >> 4;
+				sensor_RawData.temperature = (rx_buffer[3] & 0x0F) << 16 | (rx_buffer[4]) << 8 | (rx_buffer[5]);
+
+				__disable_irq();
+				ring_bufferSensor_put(&SENSOR_ring_buffer, sensor_RawData);
+				__enable_irq();
+
+				SCREEN_CalculateValues(&sensor_RawData.temperature, &sensor_RawData.humidity);
 
 				state = AHT20_STATE_IDLE;
 			}

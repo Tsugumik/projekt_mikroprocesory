@@ -11,6 +11,7 @@
 
 #include "stm32f4xx_hal.h"
 #include "screen.h"
+#include "ring_bufferSensor.h"
 
 #ifdef __cplusplus
 extern "C" {
