@@ -669,7 +669,7 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 
 			// Indeks zdekodowany
 
-			switch(cmd->arguments[0][0]) {
+			switch(cmd->arguments[1][0]) {
 				CP_Frame_t frame;
 				case '0':
 					if(CP_createFrame_archive_sensor_data(receiver, TEMPERATURE, index, &frame)) {
@@ -709,23 +709,3 @@ void CP_Free_mem(CP_Command_t* cmd) {
 		free(cmd->arguments[i]);
 	}
 }
-
-CP_StatusCode_t CP_decode_byte(uint8_t in, uint8_t* out) {
-	switch(in) {
-		case CP_START_CODE_CHAR:
-			*out = CP_START_CHAR;
-			break;
-		case CP_END_CODE_CHAR:
-			*out = CP_END_CHAR;
-			break;
-		case CP_ENCODE_CODE_CHAR:
-			*out = CP_ENCODE_CHAR;
-			break;
-		default:
-			return DECODE_ERROR;
-	}
-
-	return DECODE_OK;
-}
-
-

@@ -23,18 +23,16 @@
 #define CP_MAX_DATA_LEN		200
 #define CP_MIN_FRAME_LEN	12
 #define CP_DATA_START_IDX	7
+
+// ID Odbiorcy STM
 #define CP_STM_REC_ID		0xFF
+
 #define CP_CRC_LEN			4
 #define CP_ERROR_FRAME_LEN	3
-#define CP_MAX_COMMAND_ARG	10
 #define CP_ARG_START_CHAR	0x28
 #define CP_ARG_END_CHAR		0x29
 #define CP_ARG_SPLIT_CODE	0x2C
 #define CP_ARG_SPLIT_CHAR	","
-
-#define CP_START_CODE_CHAR	0x31
-#define CP_END_CODE_CHAR	0x32
-#define CP_ENCODE_CODE_CHAR	0x33
 
 #define CP_MAX_CMD_LEN		20
 #define CP_MAX_ARG_COUNT	20
@@ -56,14 +54,6 @@ typedef enum {
 	COMMAND_OK,
 	DECODE_OK,
 	DECODE_ERROR,
-	DR_RECEIVER_DIFF,
-	DR_WRONG_DATA_LEN_PROVIDED_IN_FRAME,
-	DR_DATA_LEN_TOO_SHORT,
-	DR_DATA_LEN_TOO_LONG,
-	DR_WRONG_NEXT_CHARACTER,
-	DR_DATA_END_WHILE_DECODE,
-	DR_FRAME_TOO_SHORT,
-	DR_RECEIVER_EQUAL_SENDER,
 	HEX_WRONG_CHAR,
 	V_CRC_ERROR,
 	COMMAND_UNKNOWN,
@@ -84,11 +74,6 @@ typedef enum {
 	RFS_CMD_PARSE_ERROR
 } CP_ReturnFrameStatus_t;
 
-typedef enum {
-	CP_DATA_OK,
-	CP_STATUS_OK,
-	CP_ERROR
-} CP_ResponseType_t;
 
 typedef enum {
 	SEND_OK,
@@ -137,7 +122,6 @@ void 				CP_receive_frame();
 CP_StatusCode_t 	CP_hex_to_byte(char, uint8_t*);
 CP_StatusCode_t 	CP_hex_to_2bytes(char, uint16_t*);
 CP_StatusCode_t 	CP_validate_frame(CP_Frame_t* frame);
-CP_StatusCode_t		CP_decode_byte(uint8_t, uint8_t*);
 
 void				CP_send_status_frame(uint8_t);
 void				CP_send_error_frame(CP_ReturnFrameStatus_t, uint8_t);
