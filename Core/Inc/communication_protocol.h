@@ -77,7 +77,11 @@ typedef enum {
 
 typedef enum {
 	RFS_COMMAND_UNKNOWN,
-	RFS_COMMAND_ARGUMENT_COUNT_INVALID
+	RFS_COMMAND_ARGUMENT_INVALID,
+	RFS_COMMAND_ARGUMENT_COUNT_ERROR,
+	RFS_INDEX_ERROR,
+	RFS_BUFFER_EMPTY,
+	RFS_CMD_PARSE_ERROR
 } CP_ReturnFrameStatus_t;
 
 typedef enum {
@@ -89,6 +93,8 @@ typedef enum {
 typedef enum {
 	SEND_OK,
 	GEN_OK,
+	GEN_ERROR,
+	SEND_ERROR
 } CP_TX_StatusCode_t;
 
 typedef struct {
@@ -129,7 +135,7 @@ CP_StatusCode_t 	CP_validate_frame(CP_Frame_t* frame);
 CP_StatusCode_t		CP_decode_byte(uint8_t, uint8_t*);
 
 void				CP_send_status_frame(uint8_t);
-void				CP_send_error_frame(CP_StatusCode_t, uint8_t);
+void				CP_send_error_frame(CP_ReturnFrameStatus_t, uint8_t);
 void				CP_send_data_frame(const char*, uint8_t);
 
 CP_TX_StatusCode_t 	CP_send_frame(CP_Frame_t*);

@@ -8,6 +8,7 @@
 #include "communication_protocol.h"
 
 extern RingBuffer_t UART_rx_ring_buffer;
+extern RingBufferSensor_RawData_t SENSOR_ring_buffer;
 extern uint32_t read_interval;
 extern I2C_HandleTypeDef hi2c1;
 extern SCREEN_TempUnits_t tempUnit;
@@ -66,7 +67,7 @@ void CP_receive_frame() {
 					CP_CMD_execute(&cmd, frame.sender_id);
 					// TODO: Dodaj obsługę błędów komendy!
 				} else {
-					CP_send_error_frame(COMMAND_PARSE_ERROR, frame.sender_id);
+					CP_send_error_frame(RFS_CMD_PARSE_ERROR, frame.sender_id);
 					read_state = CP_FS_WAIT_FOR_START_CHAR;
 				}
 			} else {
@@ -241,7 +242,9 @@ void CP_word_to_hex(uint16_t word, uint8_t* out) {
 CP_TX_StatusCode_t CP_gen_frame(const char* data, uint8_t receiver, CP_Frame_t* out) {
 	size_t datalen = strlen(data);
 
-	if(datalen != CP_MAX_DATA_LEN);
+	if(datalen > CP_MAX_DATA_LEN) {
+		return GEN_ERROR;
+	}
 
 	// Kopiowanie danych do ramki
 	for(size_t i=0; i<datalen; i++) {
@@ -257,6 +260,15 @@ CP_TX_StatusCode_t CP_gen_frame(const char* data, uint8_t receiver, CP_Frame_t* 
 	out->crc = crc16_ansi(out->data, out->data_length);
 
 	// Ramka gotowa do zakodowania i przesłania
+	return GEN_OK;
+}
+
+CP_TX_StatusCode_t CP_create_measurement_interval_frame(uint8_t receiver, CP_Frame_t* out) {
+	char buff[10];
+	sprintf(buff, "0%08lX", read_interval);
+
+	CP_gen_frame((char*)buff, receiver, out);
+
 	return GEN_OK;
 }
 
@@ -281,23 +293,7 @@ CP_TX_StatusCode_t CP_send_frame(CP_Frame_t* frame) {
 	while(data_counter < frame->data_length) {
 		temp_byte = frame->data[data_counter++];
 
-		switch(temp_byte) {
-			case CP_START_CHAR:
-				response_buff[response_index++] = CP_ENCODE_CHAR;
-				response_buff[response_index++] = CP_START_CODE_CHAR;
-				break;
-			case CP_END_CHAR:
-				response_buff[response_index++] = CP_ENCODE_CHAR;
-				response_buff[response_index++] = CP_END_CODE_CHAR;
-				break;
-			case CP_ENCODE_CHAR:
-				response_buff[response_index++] = CP_ENCODE_CHAR;
-				response_buff[response_index++] = CP_ENCODE_CODE_CHAR;
-				break;
-			default:
-				response_buff[response_index++] = temp_byte;
-				break;
-		}
+		response_buff[response_index++] = temp_byte;
 	}
 
 	CP_word_to_hex(frame->crc, &response_buff[response_index]);
@@ -312,11 +308,11 @@ CP_TX_StatusCode_t CP_send_frame(CP_Frame_t* frame) {
 
 void CP_send_status_frame(uint8_t receiver) {
 	CP_Frame_t status_frame;
-	CP_gen_frame("A0", receiver, &status_frame);
+	CP_gen_frame("10", receiver, &status_frame);
 	CP_send_frame(&status_frame);
 }
 
-void CP_send_error_frame(CP_StatusCode_t status, uint8_t receiver) {
+void CP_send_error_frame(CP_ReturnFrameStatus_t status, uint8_t receiver) {
 	CP_Frame_t error_frame;
 
 	uint8_t frame_data_buff[CP_ERROR_FRAME_LEN + 1];
@@ -422,7 +418,7 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 		if(cmd->arg_count == 0) {
 			CP_send_status_frame(receiver);
 		} else {
-			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
+			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
 		}
 	} else if(strcmp(cmd->name, "SETINTERVAL") == 0) {
 		if(cmd->arg_count == 1) {
@@ -434,17 +430,17 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 			uint8_t hex_len = strlen(cmd->arguments[0]);
 
 			if(hex_len > 8) {
-				CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
+				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 				CP_Free_mem(cmd);
 				return;
 			} else if(hex_len == 1 && cmd->arguments[0][i] == '0') {
-				CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
+				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 				CP_Free_mem(cmd);
 				return;
 			}
 
 			if((CP_hex_to_byte(cmd->arguments[0][i], &result)) != HEX_OK) {
-				CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
+				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 				CP_Free_mem(cmd);
 				return;
 			} else {
@@ -456,7 +452,7 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 			for(;i < hex_len; i++) {
 
 				if((CP_hex_to_byte(cmd->arguments[0][i], &result)) != HEX_OK) {
-					CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
+					CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 					CP_Free_mem(cmd);
 					return;
 				}
@@ -468,7 +464,7 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 			read_interval = interval;
 			CP_send_status_frame(receiver);
 		} else {
-			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
+			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
 		}
 	} else if(strcmp(cmd->name, "SETSCREEN") == 0) {
 		if(cmd->arg_count == 1) {
@@ -483,11 +479,11 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 					CP_send_status_frame(receiver);
 				break;
 				default:
-					CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
+					CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 					break;
 			}
 		} else {
-			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
+			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
 		}
 	} else if(strcmp(cmd->name, "SETTEMPUNIT") == 0) {
 		if(cmd->arg_count == 1) {
@@ -509,14 +505,22 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 					CP_send_status_frame(receiver);
 					break;
 				default:
-					CP_send_error_frame(COMMAND_ARGUMENT_TYPE_ERROR, receiver);
+					CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 					break;
 			}
 		} else {
-			CP_send_error_frame(COMMAND_ARGUMENT_ERROR, receiver);
+			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
+		}
+	} else if(strcmp(cmd->name, "GETINTERVAL") == 0) {
+		if(cmd->arg_count == 0) {
+			CP_Frame_t frame;
+			CP_create_measurement_interval_frame(receiver, &frame);
+			CP_send_frame(&frame);
+		} else {
+			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
 		}
 	} else {
-		CP_send_error_frame(COMMAND_UNKNOWN, receiver);
+		CP_send_error_frame(RFS_COMMAND_UNKNOWN, receiver);
 		CP_Free_mem(cmd);
 		return;
 	}
@@ -548,3 +552,5 @@ CP_StatusCode_t CP_decode_byte(uint8_t in, uint8_t* out) {
 
 	return DECODE_OK;
 }
+
+
