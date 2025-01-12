@@ -60,4 +60,10 @@ uint8_t ring_bufferSensor_put(RingBufferSensor_RawData_t*, Sensor_RawData_t);
 // Pobiera bajt z bufora
 uint8_t ring_bufferSensor_get(RingBufferSensor_RawData_t*, Sensor_RawData_t*);
 
+uint8_t ring_bufferSensor_get_latest(RingBufferSensor_RawData_t*, Sensor_RawData_t*);
+
+uint8_t ring_bufferSensor_get_at_index(RingBufferSensor_RawData_t*, uint16_t, Sensor_RawData_t*);
+
+uint16_t ring_bufferSensor_get_oldest_index(RingBufferSensor_RawData_t*);
+
 #endif /* INC_RING_BUFFERSENSOR_H_ */
