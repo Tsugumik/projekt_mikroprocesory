@@ -128,6 +128,11 @@ typedef enum {
 	CP_FS_VALIDATE_CRC
 } CP_FrameStatus_t;
 
+typedef enum {
+	TEMPERATURE,
+	HUMIDITY
+} CP_ReturnSensorData_t;
+
 void 				CP_receive_frame();
 CP_StatusCode_t 	CP_hex_to_byte(char, uint8_t*);
 CP_StatusCode_t 	CP_hex_to_2bytes(char, uint16_t*);
@@ -147,6 +152,12 @@ CP_StatusCode_t		CP_parse_command(CP_Frame_t*, CP_Command_t*);
 void 				CP_CMD_execute(CP_Command_t*, uint8_t);
 
 void				CP_Free_mem(CP_Command_t*);
+
+CP_TX_StatusCode_t 	CP_createFrame_measurement_interval(uint8_t, CP_Frame_t*);
+CP_TX_StatusCode_t	CP_createFrame_latest_sensor_data(uint8_t, CP_ReturnSensorData_t, CP_Frame_t*);
+CP_TX_StatusCode_t	CP_createFrame_archive_sensor_data(uint8_t, CP_ReturnSensorData_t, uint16_t, CP_Frame_t*);
+CP_TX_StatusCode_t	CP_createFrame_oldest_index(uint8_t, CP_Frame_t*);
+
 
 
 

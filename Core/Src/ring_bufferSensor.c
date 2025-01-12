@@ -58,7 +58,7 @@ uint8_t ring_bufferSensor_get_latest(RingBufferSensor_RawData_t* rb, Sensor_RawD
         return 0;
     }
 
-    uint16_t latest_index = (rb->head == 0) ? (rb->size - 1) : (rb->head - 1); // Handle wrap-around
+    uint16_t latest_index = (rb->head == 0) ? (rb->size - 1) : (rb->head - 1);
     *data = rb->buffer[latest_index];
     return 1;
 }
@@ -66,7 +66,7 @@ uint8_t ring_bufferSensor_get_latest(RingBufferSensor_RawData_t* rb, Sensor_RawD
 // Pobieranie wartości z bufora o podanym indeksie (względem początku bufora kołowego)
 uint8_t ring_bufferSensor_get_at_index(RingBufferSensor_RawData_t* rb, uint16_t index, Sensor_RawData_t* data) {
     if (ring_bufferSensor_is_empty(rb) || index >= rb->size) {
-        return 0; // Index out of bounds or buffer empty
+        return 0;
     }
 
     uint16_t actual_index = (rb->tail + index) % rb->size;

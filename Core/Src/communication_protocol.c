@@ -263,13 +263,90 @@ CP_TX_StatusCode_t CP_gen_frame(const char* data, uint8_t receiver, CP_Frame_t* 
 	return GEN_OK;
 }
 
-CP_TX_StatusCode_t CP_create_measurement_interval_frame(uint8_t receiver, CP_Frame_t* out) {
+CP_TX_StatusCode_t CP_createFrame_measurement_interval(uint8_t receiver, CP_Frame_t* out) {
 	char buff[10];
 	sprintf(buff, "0%08lX", read_interval);
 
 	CP_gen_frame((char*)buff, receiver, out);
 
 	return GEN_OK;
+}
+
+CP_TX_StatusCode_t CP_createFrame_oldest_index(uint8_t receiver, CP_Frame_t* out) {
+	char buff[6];
+	sprintf(buff, "0%03X", ring_bufferSensor_get_oldest_index(&SENSOR_ring_buffer));
+
+	CP_gen_frame((char*)buff, receiver, out);
+
+	return GEN_OK;
+}
+
+CP_TX_StatusCode_t	CP_createFrame_latest_sensor_data(uint8_t receiver, CP_ReturnSensorData_t dataType, CP_Frame_t* out) {
+	char buff[9];
+
+	Sensor_RawData_t rawData;
+
+	switch(dataType) {
+		case TEMPERATURE:
+			__disable_irq();
+			if(ring_bufferSensor_get_latest(&SENSOR_ring_buffer, &rawData)) {
+				__enable_irq();
+				sprintf(buff, "0%01X%05lX", (uint8_t)dataType, rawData.temperature);
+				CP_gen_frame((char*)buff, receiver, out);
+				return GEN_OK;
+			} else {
+				__enable_irq();
+				return GEN_ERROR;
+			}
+		case HUMIDITY:
+			__disable_irq();
+			if(ring_bufferSensor_get_latest(&SENSOR_ring_buffer, &rawData)) {
+				__enable_irq();
+				sprintf(buff, "0%01X%05lX", (uint8_t)dataType, rawData.humidity);
+				CP_gen_frame((char*)buff, receiver, out);
+				return GEN_OK;
+			} else {
+				__enable_irq();
+				return GEN_ERROR;
+			}
+		default:
+			return GEN_ERROR;
+	}
+
+}
+
+CP_TX_StatusCode_t	CP_createFrame_archive_sensor_data(uint8_t receiver, CP_ReturnSensorData_t dataType, uint16_t index, CP_Frame_t* out) {
+	char buff[13];
+
+	Sensor_RawData_t rawData;
+
+	switch(dataType) {
+		case TEMPERATURE:
+			__disable_irq();
+			if(ring_bufferSensor_get_at_index(&SENSOR_ring_buffer, index, &rawData)) {
+				__enable_irq();
+				sprintf(buff, "0%03X%01X%05lX", index, (uint8_t)dataType, rawData.temperature);
+				CP_gen_frame((char*)buff, receiver, out);
+				return GEN_OK;
+			} else {
+				__enable_irq();
+				return GEN_ERROR;
+			}
+		case HUMIDITY:
+			__disable_irq();
+			if(ring_bufferSensor_get_at_index(&SENSOR_ring_buffer, index, &rawData)) {
+				__enable_irq();
+				sprintf(buff, "0%03X%01X%05lX", index, (uint8_t)dataType, rawData.humidity);
+				CP_gen_frame((char*)buff, receiver, out);
+				return GEN_OK;
+			} else {
+				__enable_irq();
+				return GEN_ERROR;
+			}
+		default:
+			return GEN_ERROR;
+	}
+
 }
 
 CP_TX_StatusCode_t CP_send_frame(CP_Frame_t* frame) {
@@ -317,7 +394,7 @@ void CP_send_error_frame(CP_ReturnFrameStatus_t status, uint8_t receiver) {
 
 	uint8_t frame_data_buff[CP_ERROR_FRAME_LEN + 1];
 
-	frame_data_buff[0] = 'F';
+	frame_data_buff[0] = '2';
 	CP_byte_to_2hex(status, &frame_data_buff[1]);
 
 	frame_data_buff[CP_ERROR_FRAME_LEN] = '\0';
@@ -514,8 +591,106 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 	} else if(strcmp(cmd->name, "GETINTERVAL") == 0) {
 		if(cmd->arg_count == 0) {
 			CP_Frame_t frame;
-			CP_create_measurement_interval_frame(receiver, &frame);
+			CP_createFrame_measurement_interval(receiver, &frame);
 			CP_send_frame(&frame);
+		} else {
+			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
+		}
+	} else if(strcmp(cmd->name, "GETOLDINDEX") == 0) {
+		if(cmd->arg_count == 0) {
+			CP_Frame_t frame;
+			CP_createFrame_oldest_index(receiver, &frame);
+			CP_send_frame(&frame);
+		} else {
+			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
+		}
+	} else if(strcmp(cmd->name, "GETDATA") == 0) {
+		if(cmd->arg_count == 1) {
+			CP_Frame_t frame;
+			switch(cmd->arguments[0][0]) {
+				case '0':
+					if(CP_createFrame_latest_sensor_data(receiver, TEMPERATURE, &frame)) {
+						CP_send_frame(&frame);
+						break;
+					} else {
+						CP_send_error_frame(RFS_BUFFER_EMPTY, receiver);
+						break;
+					}
+				case '1':
+					if(CP_createFrame_latest_sensor_data(receiver, HUMIDITY, &frame)) {
+						CP_send_frame(&frame);
+						break;
+					} else {
+						CP_send_error_frame(RFS_BUFFER_EMPTY, receiver);
+						break;
+					}
+				default:
+					CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
+					break;
+			}
+		} else {
+			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
+		}
+	} else if(strcmp(cmd->name, "GETARCHIVE") == 0) {
+		if(cmd->arg_count == 2) {
+			uint16_t index = 0;
+			uint8_t result;
+			uint8_t i = 0;
+
+			uint8_t hex_len = strlen(cmd->arguments[0]);
+
+			if(hex_len > 3) {
+				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
+				CP_Free_mem(cmd);
+				return;
+			}
+
+			if((CP_hex_to_byte(cmd->arguments[0][i], &result)) != HEX_OK) {
+				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
+				CP_Free_mem(cmd);
+				return;
+			} else {
+				index |= result;
+			}
+
+			i++;
+
+			for(;i < hex_len; i++) {
+
+				if((CP_hex_to_byte(cmd->arguments[0][i], &result)) != HEX_OK) {
+					CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
+					CP_Free_mem(cmd);
+					return;
+				}
+
+				index <<= 4;
+				index |= result;
+			}
+
+			// Indeks zdekodowany
+
+			switch(cmd->arguments[0][0]) {
+				CP_Frame_t frame;
+				case '0':
+					if(CP_createFrame_archive_sensor_data(receiver, TEMPERATURE, index, &frame)) {
+						CP_send_frame(&frame);
+						break;
+					} else {
+						CP_send_error_frame(RFS_INDEX_ERROR, receiver);
+						break;
+					}
+				case '1':
+					if(CP_createFrame_archive_sensor_data(receiver, HUMIDITY, index, &frame)) {
+						CP_send_frame(&frame);
+						break;
+					} else {
+						CP_send_error_frame(RFS_INDEX_ERROR, receiver);
+						break;
+					}
+				default:
+					CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
+					break;
+			}
 		} else {
 			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
 		}
