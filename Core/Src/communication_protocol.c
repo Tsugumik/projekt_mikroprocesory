@@ -81,7 +81,7 @@ void CP_receive_frame() {
 
 		switch(read_state) {
 			case CP_FS_WAIT_FOR_SENDER_BYTE1:
-				if(CP_hex_to_byte(rx_temp, &frame.sender_id) == HEX_OK) {
+				if(HEX_decode_char(rx_temp, &frame.sender_id) == HEXD_OK) {
 					frame.sender_id <<= 4;
 					read_state = CP_FS_WAIT_FOR_SENDER_BYTE2;
 				} else {
@@ -89,7 +89,7 @@ void CP_receive_frame() {
 				}
 				break;
 			case CP_FS_WAIT_FOR_SENDER_BYTE2:
-				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
 					frame.sender_id |= temp;
 					read_state = CP_FS_WAIT_FOR_RECEIVER_BYTE1;
 				} else {
@@ -97,7 +97,7 @@ void CP_receive_frame() {
 				}
 				break;
 			case CP_FS_WAIT_FOR_RECEIVER_BYTE1:
-				if(CP_hex_to_byte(rx_temp, &frame.receiver_id) == HEX_OK) {
+				if(HEX_decode_char(rx_temp, &frame.receiver_id) == HEXD_OK) {
 					frame.receiver_id <<= 4;
 					read_state = CP_FS_WAIT_FOR_RECEIVER_BYTE2;
 				} else {
@@ -105,7 +105,7 @@ void CP_receive_frame() {
 				}
 				break;
 			case CP_FS_WAIT_FOR_RECEIVER_BYTE2:
-				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
 					frame.receiver_id |= temp;
 
 					// Sprawdzanie czy odbiorca się zgadza
@@ -120,7 +120,7 @@ void CP_receive_frame() {
 				}
 				break;
 			case CP_FS_WAIT_FOR_DATALEN_BYTE1:
-				if(CP_hex_to_byte(rx_temp, &frame.data_length) == HEX_OK) {
+				if(HEX_decode_char(rx_temp, &frame.data_length) == HEXD_OK) {
 					frame.data_length <<= 4;
 					read_state = CP_FS_WAIT_FOR_DATALEN_BYTE2;
 				} else {
@@ -128,7 +128,7 @@ void CP_receive_frame() {
 				}
 				break;
 			case CP_FS_WAIT_FOR_DATALEN_BYTE2:
-				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
 					frame.data_length |= temp;
 					if(frame.data_length > CP_MAX_DATA_LEN) {
 						read_state = CP_FS_WAIT_FOR_START_CHAR;
@@ -164,7 +164,8 @@ void CP_receive_frame() {
 				}
 				break;
 			case CP_FS_WAIT_FOR_CRC_BYTE1:
-				if(CP_hex_to_2bytes(rx_temp, &frame.crc) == HEX_OK) {
+				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
+					frame.crc |= temp;
 					frame.crc <<= 4;
 					read_state = CP_FS_WAIT_FOR_CRC_BYTE2;
 				} else {
@@ -172,7 +173,7 @@ void CP_receive_frame() {
 				}
 				break;
 			case CP_FS_WAIT_FOR_CRC_BYTE2:
-				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
 					frame.crc |= temp;
 					frame.crc <<= 4;
 					read_state = CP_FS_WAIT_FOR_CRC_BYTE3;
@@ -181,7 +182,7 @@ void CP_receive_frame() {
 				}
 				break;
 			case CP_FS_WAIT_FOR_CRC_BYTE3:
-				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
 					frame.crc |= temp;
 					frame.crc <<= 4;
 					read_state = CP_FS_WAIT_FOR_CRC_BYTE4;
@@ -190,7 +191,7 @@ void CP_receive_frame() {
 				}
 				break;
 			case CP_FS_WAIT_FOR_CRC_BYTE4:
-				if(CP_hex_to_byte(rx_temp, &temp) == HEX_OK) {
+				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
 					frame.crc |= temp;
 					read_state = CP_FS_WAIT_FOR_END_CHAR;
 				} else {
@@ -201,27 +202,6 @@ void CP_receive_frame() {
 				break;
 		}
 	}
-}
-
-
-CP_StatusCode_t CP_hex_to_byte(char ch, uint8_t* out) {
-	if(!((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F'))) {
-		return HEX_WRONG_CHAR;
-	}
-
-	*out = (ch >= 'A' ? ch - 'A' + 10 : ch - '0');
-
-	return HEX_OK;
-}
-
-CP_StatusCode_t CP_hex_to_2bytes(char ch, uint16_t* out) {
-	if(!((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F'))) {
-		return HEX_WRONG_CHAR;
-	}
-
-	*out = (ch >= 'A' ? ch - 'A' + 10 : ch - '0');
-
-	return HEX_OK;
 }
 
 CP_StatusCode_t CP_validate_frame(CP_Frame_t* frame) {
@@ -500,42 +480,11 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 	} else if(strcmp(cmd->name, "SETINTERVAL") == 0) {
 		if(cmd->arg_count == 1) {
 			uint32_t interval = 0;
-			uint8_t result;
 
-			uint8_t i = 0;
-
-			uint8_t hex_len = strlen(cmd->arguments[0]);
-
-			if(hex_len > 8) {
+			if(HEX_decode(cmd->arguments[0], (void*)&interval, 0x1, UINT32_MAX, HEXDM_32BIT) != HEXD_OK) {
 				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 				CP_Free_mem(cmd);
 				return;
-			} else if(hex_len == 1 && cmd->arguments[0][i] == '0') {
-				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
-				CP_Free_mem(cmd);
-				return;
-			}
-
-			if((CP_hex_to_byte(cmd->arguments[0][i], &result)) != HEX_OK) {
-				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
-				CP_Free_mem(cmd);
-				return;
-			} else {
-				interval |= result;
-			}
-
-			i++;
-
-			for(;i < hex_len; i++) {
-
-				if((CP_hex_to_byte(cmd->arguments[0][i], &result)) != HEX_OK) {
-					CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
-					CP_Free_mem(cmd);
-					return;
-				}
-
-				interval <<= 4;
-				interval |= result;
 			}
 
 			read_interval = interval;
@@ -545,13 +494,20 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 		}
 	} else if(strcmp(cmd->name, "SETSCREEN") == 0) {
 		if(cmd->arg_count == 1) {
-			// TODO: Ustawiać flagę statusu wyświetlacza
-			switch(cmd->arguments[0][0]) {
-				case '0':
+			uint8_t screen_mode;
+
+			if(HEX_decode(cmd->arguments[0], (void*)&screen_mode, 0x0, 0x1, HEXDM_8BIT) != HEXD_OK) {
+				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
+				CP_Free_mem(cmd);
+				return;
+			}
+
+			switch(screen_mode) {
+				case 0:
 					SCREEN_SetStatus(SCREEN_OFF);
 					CP_send_status_frame(receiver);
 				break;
-				case '1':
+				case 1:
 					SCREEN_SetStatus(SCREEN_ON);
 					CP_send_status_frame(receiver);
 				break;
@@ -564,19 +520,27 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 		}
 	} else if(strcmp(cmd->name, "SETTEMPUNIT") == 0) {
 		if(cmd->arg_count == 1) {
-			// TODO: Ustawiać flagę statusu wyświetlacza
-			switch(cmd->arguments[0][0]) {
-				case '0':
+
+			uint8_t temp_mode;
+
+			if(HEX_decode(cmd->arguments[0], (void*)&temp_mode, 0x0, 0x2, HEXDM_8BIT) != HEXD_OK) {
+				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
+				CP_Free_mem(cmd);
+				return;
+			}
+
+			switch(temp_mode) {
+				case 0:
 					tempUnit = SCREEN_TempUnit_C;
 					SCREEN_Update();
 					CP_send_status_frame(receiver);
 				break;
-				case '1':
+				case 1:
 					tempUnit = SCREEN_TempUnit_F;
 					SCREEN_Update();
 					CP_send_status_frame(receiver);
 				break;
-				case '2':
+				case 2:
 					tempUnit = SCREEN_TempUnit_K;
 					SCREEN_Update();
 					CP_send_status_frame(receiver);
@@ -607,8 +571,17 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 	} else if(strcmp(cmd->name, "GETDATA") == 0) {
 		if(cmd->arg_count == 1) {
 			CP_Frame_t frame;
-			switch(cmd->arguments[0][0]) {
-				case '0':
+
+			uint8_t data_type;
+
+			if(HEX_decode(cmd->arguments[0], (void*)&data_type, 0x0, 0x1, HEXDM_8BIT) != HEXD_OK) {
+				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
+				CP_Free_mem(cmd);
+				return;
+			}
+
+			switch(data_type) {
+				case 0:
 					if(CP_createFrame_latest_sensor_data(receiver, TEMPERATURE, &frame)) {
 						CP_send_frame(&frame);
 						break;
@@ -616,7 +589,7 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 						CP_send_error_frame(RFS_BUFFER_EMPTY, receiver);
 						break;
 					}
-				case '1':
+				case 1:
 					if(CP_createFrame_latest_sensor_data(receiver, HUMIDITY, &frame)) {
 						CP_send_frame(&frame);
 						break;
@@ -633,45 +606,24 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 		}
 	} else if(strcmp(cmd->name, "GETARCHIVE") == 0) {
 		if(cmd->arg_count == 2) {
-			uint16_t index = 0;
-			uint8_t result;
-			uint8_t i = 0;
+			uint16_t index;
+			uint8_t data_type;
 
-			uint8_t hex_len = strlen(cmd->arguments[0]);
-
-			if(hex_len > 3) {
+			if(HEX_decode(cmd->arguments[0], (void*)&index, 0x0, 0x2ED, HEXDM_16BIT) != HEXD_OK) {
 				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 				CP_Free_mem(cmd);
 				return;
 			}
 
-			if((CP_hex_to_byte(cmd->arguments[0][i], &result)) != HEX_OK) {
+			if(HEX_decode(cmd->arguments[1], (void*)&data_type, 0x0, 0x1, HEXDM_8BIT) != HEXD_OK) {
 				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 				CP_Free_mem(cmd);
 				return;
-			} else {
-				index |= result;
 			}
 
-			i++;
-
-			for(;i < hex_len; i++) {
-
-				if((CP_hex_to_byte(cmd->arguments[0][i], &result)) != HEX_OK) {
-					CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
-					CP_Free_mem(cmd);
-					return;
-				}
-
-				index <<= 4;
-				index |= result;
-			}
-
-			// Indeks zdekodowany
-
-			switch(cmd->arguments[1][0]) {
+			switch(data_type) {
 				CP_Frame_t frame;
-				case '0':
+				case 0:
 					if(CP_createFrame_archive_sensor_data(receiver, TEMPERATURE, index, &frame)) {
 						CP_send_frame(&frame);
 						break;
@@ -679,7 +631,7 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 						CP_send_error_frame(RFS_INDEX_ERROR, receiver);
 						break;
 					}
-				case '1':
+				case 1:
 					if(CP_createFrame_archive_sensor_data(receiver, HUMIDITY, index, &frame)) {
 						CP_send_frame(&frame);
 						break;

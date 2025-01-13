@@ -16,6 +16,7 @@
 #include "commands.h"
 #include "stdlib.h"
 #include "screen.h"
+#include "hex_decoder.h"
 
 #define CP_START_CHAR 		0x7B
 #define CP_END_CHAR 		0x7D
@@ -119,8 +120,6 @@ typedef enum {
 } CP_ReturnSensorData_t;
 
 void 				CP_receive_frame();
-CP_StatusCode_t 	CP_hex_to_byte(char, uint8_t*);
-CP_StatusCode_t 	CP_hex_to_2bytes(char, uint16_t*);
 CP_StatusCode_t 	CP_validate_frame(CP_Frame_t* frame);
 
 void				CP_send_status_frame(uint8_t);
