@@ -165,6 +165,7 @@ void CP_receive_frame() {
 				break;
 			case CP_FS_WAIT_FOR_CRC_BYTE1:
 				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
+					frame.crc = 0;
 					frame.crc |= temp;
 					frame.crc <<= 4;
 					read_state = CP_FS_WAIT_FOR_CRC_BYTE2;
