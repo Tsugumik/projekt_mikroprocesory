@@ -13,7 +13,7 @@
 #include "stdio.h"
 
 typedef enum {
-	SCREEN_TempUnit_C, SCREEN_TempUnit_K, SCREEN_TempUnit_F
+	SCREEN_TempUnit_C, SCREEN_TempUnit_F, SCREEN_TempUnit_K
 } SCREEN_TempUnits_t;
 
 typedef enum {
