@@ -261,72 +261,58 @@ CP_TX_StatusCode_t CP_createFrame_oldest_index(uint8_t receiver, CP_Frame_t* out
 	return GEN_OK;
 }
 
-CP_TX_StatusCode_t	CP_createFrame_latest_sensor_data(uint8_t receiver, CP_ReturnSensorData_t dataType, CP_Frame_t* out) {
-	char buff[9];
+CP_TX_StatusCode_t CP_createFrame_latest_sensor_data(uint8_t receiver, CP_ReturnSensorData_t dataType, CP_Frame_t* out) {
+    char buff[9];
+    Sensor_RawData_t rawData;
+    uint8_t data_available;
 
-	Sensor_RawData_t rawData;
+    __disable_irq();
+    data_available = ring_bufferSensor_get_latest(&SENSOR_ring_buffer, &rawData);
+    __enable_irq();
 
-	switch(dataType) {
-		case TEMPERATURE:
-			__disable_irq();
-			if(ring_bufferSensor_get_latest(&SENSOR_ring_buffer, &rawData)) {
-				__enable_irq();
-				sprintf(buff, "0%01X%05lX", (uint8_t)dataType, rawData.temperature);
-				CP_gen_frame((char*)buff, receiver, out);
-				return GEN_OK;
-			} else {
-				__enable_irq();
-				return GEN_ERROR;
-			}
-		case HUMIDITY:
-			__disable_irq();
-			if(ring_bufferSensor_get_latest(&SENSOR_ring_buffer, &rawData)) {
-				__enable_irq();
-				sprintf(buff, "0%01X%05lX", (uint8_t)dataType, rawData.humidity);
-				CP_gen_frame((char*)buff, receiver, out);
-				return GEN_OK;
-			} else {
-				__enable_irq();
-				return GEN_ERROR;
-			}
-		default:
-			return GEN_ERROR;
-	}
-
+    if (data_available) {
+        switch (dataType) {
+            case TEMPERATURE:
+                sprintf(buff, "0%01X%05lX", (uint8_t)dataType, rawData.temperature);
+                break;
+            case HUMIDITY:
+                sprintf(buff, "0%01X%05lX", (uint8_t)dataType, rawData.humidity);
+                break;
+            default:
+                return GEN_ERROR;
+        }
+        CP_gen_frame((char*)buff, receiver, out);
+        return GEN_OK;
+    } else {
+        return GEN_ERROR;
+    }
 }
 
-CP_TX_StatusCode_t	CP_createFrame_archive_sensor_data(uint8_t receiver, CP_ReturnSensorData_t dataType, uint16_t index, CP_Frame_t* out) {
-	char buff[13];
+CP_TX_StatusCode_t CP_createFrame_archive_sensor_data(uint8_t receiver, CP_ReturnSensorData_t dataType, uint16_t index, CP_Frame_t* out) {
+    char buff[13];
+    Sensor_RawData_t rawData;
+    uint8_t data_available;
 
-	Sensor_RawData_t rawData;
+    __disable_irq();
+    data_available = ring_bufferSensor_get_at_index(&SENSOR_ring_buffer, index, &rawData);
+    __enable_irq();
 
-	switch(dataType) {
-		case TEMPERATURE:
-			__disable_irq();
-			if(ring_bufferSensor_get_at_index(&SENSOR_ring_buffer, index, &rawData)) {
-				__enable_irq();
-				sprintf(buff, "0%03X%01X%05lX", index, (uint8_t)dataType, rawData.temperature);
-				CP_gen_frame((char*)buff, receiver, out);
-				return GEN_OK;
-			} else {
-				__enable_irq();
-				return GEN_ERROR;
-			}
-		case HUMIDITY:
-			__disable_irq();
-			if(ring_bufferSensor_get_at_index(&SENSOR_ring_buffer, index, &rawData)) {
-				__enable_irq();
-				sprintf(buff, "0%03X%01X%05lX", index, (uint8_t)dataType, rawData.humidity);
-				CP_gen_frame((char*)buff, receiver, out);
-				return GEN_OK;
-			} else {
-				__enable_irq();
-				return GEN_ERROR;
-			}
-		default:
-			return GEN_ERROR;
-	}
-
+    if (data_available) {
+        switch (dataType) {
+            case TEMPERATURE:
+                sprintf(buff, "0%03X%01X%05lX", index, (uint8_t)dataType, rawData.temperature);
+                break;
+            case HUMIDITY:
+                sprintf(buff, "0%03X%01X%05lX", index, (uint8_t)dataType, rawData.humidity);
+                break;
+            default:
+                return GEN_ERROR;
+        }
+        CP_gen_frame((char*)buff, receiver, out);
+        return GEN_OK;
+    } else {
+        return GEN_ERROR;
+    }
 }
 
 CP_TX_StatusCode_t CP_send_frame(CP_Frame_t* frame) {
