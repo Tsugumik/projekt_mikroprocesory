@@ -47,11 +47,11 @@ void SCREEN_Update() {
 			sprintf(tempStrBuffer, "T: %.2f C", tempCBuffer);
 			break;
 		case SCREEN_TempUnit_F:
-			calcTemp = tempCBuffer * 9.0 / 5.0 + 32.0;
+			calcTemp = SCREEN_ConvertTemp(tempCBuffer, SCREEN_TempUnit_F);
 			sprintf(tempStrBuffer, "T: %.2f F", calcTemp);
 			break;
 		case SCREEN_TempUnit_K:
-			calcTemp = tempCBuffer + 273.15;
+			calcTemp = SCREEN_ConvertTemp(tempCBuffer, SCREEN_TempUnit_K);
 			sprintf(tempStrBuffer, "T: %.2f K", calcTemp);
 			break;
 		default:
@@ -67,4 +67,17 @@ void SCREEN_Update() {
 	ssd1306_SetCursor(5, 30);
 	ssd1306_WriteString(humStrBuffer, Font_11x18, White);
 	ssd1306_UpdateScreen();
+}
+
+float SCREEN_ConvertTemp(float tempInC, SCREEN_TempUnits_t outUnit) {
+	switch(outUnit) {
+		case SCREEN_TempUnit_C:
+			return tempInC;
+		case SCREEN_TempUnit_F:
+			return tempInC * 9.0 / 5.0 + 32.0;
+		case SCREEN_TempUnit_K:
+			return tempInC + 273.15;
+		default:
+			return tempInC;
+	}
 }

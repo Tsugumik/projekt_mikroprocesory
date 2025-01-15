@@ -23,5 +23,6 @@ typedef enum {
 void SCREEN_CalculateValues(uint32_t* temp20bit, uint32_t* humidity20bit);
 void SCREEN_SetStatus(SCREEN_Status_t status);
 void SCREEN_Update();
+float SCREEN_ConvertTemp(float, SCREEN_TempUnits_t);
 
 #endif /* INC_SCREEN_H_ */
