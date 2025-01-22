@@ -8,7 +8,7 @@
 #include "screen.h"
 
 static SCREEN_Status_t screenStatus = SCREEN_ON;
-SCREEN_TempUnits_t tempUnit = SCREEN_TempUnit_C;
+SCREEN_Units_t tempUnit = SCREEN_TempUnit_C;
 
 static float tempCBuffer = 0;
 static float humBuffer = 0;
@@ -20,6 +20,13 @@ void SCREEN_CalculateValues(uint32_t* temp20bit, uint32_t* humidity20bit) {
 	humBuffer = *humidity20bit / 10485.76;
 
 	SCREEN_Update();
+}
+
+float SCREEN_CalculateTemp(uint32_t* temp20bit) {
+	return (*temp20bit / 1048576.0)*200.0 - 50.0;
+}
+float SCREEN_CalculateHumidity(uint32_t* humidity20bit) {
+	return *humidity20bit / 10485.76;
 }
 
 void SCREEN_SetStatus(SCREEN_Status_t status) {
@@ -69,7 +76,7 @@ void SCREEN_Update() {
 	ssd1306_UpdateScreen();
 }
 
-float SCREEN_ConvertTemp(float tempInC, SCREEN_TempUnits_t outUnit) {
+float SCREEN_ConvertTemp(float tempInC, SCREEN_Units_t outUnit) {
 	switch(outUnit) {
 		case SCREEN_TempUnit_C:
 			return tempInC;
