@@ -60,9 +60,9 @@ Projekt został zrealizowany w ramach przedmiotu **Mikroprocesory**. Wykorzystan
 | `SETSCREENTEMPUNIT`        | `0` (C), `1` (F), `2` (K)    | Ustawia jednostkę temperatury na wyświetlaczu.   |
 | `SETRETURNTEMPUNIT`        | `0` (C), `1` (F), `2` (K)    | Ustawia jednostkę temperatury dla danych zwrotnych. |
 | `GETRETURNTEMPUNIT`        | Brak                          | Zwraca aktualnie ustawioną jednostkę temperatury.|
-| `SETINTERVAL`              | `0x0000` - `0xFFFF`          | Ustawia interwał pomiarowy (w ms).               |
-| `GETDATA`               | `IndeksOd`, `IndeksDo`, Typ   | Pobiera dane archiwalne.                         |
-| `GETCURRENT`               | Brak                          | Pobiera dane bieżące.                            |
+| `SETINTERVAL`              | `0x0000` - `0xFFFFFFFF`          | Ustawia interwał pomiarowy (w ms).               |
+| `GETARCHIVE`               | `IndeksOd`, `IndeksDo`, Typ   | Pobiera dane archiwalne.                         |
+| `GETDATA`               | Brak                          | Pobiera dane bieżące.                            |
 
 + Dodatkowe, do przejrzenia w kodzie projektu.
 
