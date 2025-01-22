@@ -17,6 +17,7 @@
 #include "stdlib.h"
 #include "screen.h"
 #include "hex_decoder.h"
+#include "math.h"
 
 #define CP_START_CHAR 		0x7B
 #define CP_END_CHAR 		0x7D
@@ -140,6 +141,11 @@ CP_TX_StatusCode_t 	CP_createFrame_measurement_interval(uint8_t, CP_Frame_t*);
 CP_TX_StatusCode_t	CP_createFrame_latest_sensor_data(uint8_t, CP_ReturnSensorData_t, CP_Frame_t*);
 CP_TX_StatusCode_t	CP_createFrame_archive_sensor_data(uint8_t, CP_ReturnSensorData_t, uint16_t, CP_Frame_t*);
 CP_TX_StatusCode_t	CP_createFrame_oldest_index(uint8_t, CP_Frame_t*);
+CP_TX_StatusCode_t	CP_createFrame_latest_index(uint8_t, CP_Frame_t*);
+CP_TX_StatusCode_t 	CP_createFrame_returnTempUnit(uint8_t, CP_Frame_t*);
+
+
+void				CP_breakFloat(float num, uint16_t* integer, uint8_t* fractional, uint8_t* isNegative);
 
 
 

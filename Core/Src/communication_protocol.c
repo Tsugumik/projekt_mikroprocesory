@@ -11,7 +11,9 @@ extern RingBuffer_t UART_rx_ring_buffer;
 extern RingBufferSensor_RawData_t SENSOR_ring_buffer;
 extern uint32_t read_interval;
 extern I2C_HandleTypeDef hi2c1;
-extern SCREEN_TempUnits_t tempUnit;
+extern SCREEN_Units_t tempUnit;
+SCREEN_Units_t returnTempUnit;
+SCREEN_Units_t returnTempUnit = SCREEN_TempUnit_C;
 
 // Do testowania, już nieaktualne
 void TEST_received_data() {
@@ -65,7 +67,6 @@ void CP_receive_frame() {
 
 					// I na końcu jej wykonanie
 					CP_CMD_execute(&cmd, frame.sender_id);
-					// TODO: Dodaj obsługę błędów komendy!
 				} else {
 					CP_send_error_frame(RFS_CMD_PARSE_ERROR, frame.sender_id);
 					read_state = CP_FS_WAIT_FOR_START_CHAR;
@@ -255,15 +256,51 @@ CP_TX_StatusCode_t CP_createFrame_measurement_interval(uint8_t receiver, CP_Fram
 
 CP_TX_StatusCode_t CP_createFrame_oldest_index(uint8_t receiver, CP_Frame_t* out) {
 	char buff[6];
-	sprintf(buff, "0%03X", ring_bufferSensor_get_oldest_index(&SENSOR_ring_buffer));
+
+	__disable_irq();
+	uint16_t oldindex = ring_bufferSensor_get_oldest_index(&SENSOR_ring_buffer);
+	__enable_irq();
+
+	sprintf(buff, "0%03X", oldindex);
 
 	CP_gen_frame((char*)buff, receiver, out);
 
 	return GEN_OK;
 }
 
+CP_TX_StatusCode_t CP_createFrame_returnTempUnit(uint8_t receiver, CP_Frame_t* out) {
+	char buff[4];
+
+	sprintf(buff, "0%01X", (uint8_t)returnTempUnit);
+
+	CP_gen_frame((char*)buff, receiver, out);
+
+	return GEN_OK;
+}
+
+CP_TX_StatusCode_t CP_createFrame_latest_index(uint8_t receiver, CP_Frame_t* out) {
+	char buff[6];
+
+	uint16_t latest;
+
+	__disable_irq();
+	uint8_t status = ring_bufferSensor_get_latest_index(&SENSOR_ring_buffer, &latest);
+	__enable_irq();
+
+	if(!status) {
+		return GEN_ERROR;
+	}
+
+	sprintf(buff, "0%03X", latest);
+
+	CP_gen_frame((char*)buff, receiver, out);
+
+	return GEN_OK;
+
+}
+
 CP_TX_StatusCode_t CP_createFrame_latest_sensor_data(uint8_t receiver, CP_ReturnSensorData_t dataType, CP_Frame_t* out) {
-    char buff[9];
+    char buff[14];
     Sensor_RawData_t rawData;
     uint8_t data_available;
 
@@ -274,10 +311,27 @@ CP_TX_StatusCode_t CP_createFrame_latest_sensor_data(uint8_t receiver, CP_Return
     if (data_available) {
         switch (dataType) {
             case TEMPERATURE:
-                sprintf(buff, "0%01X%05lX", (uint8_t)dataType, rawData.temperature);
+            	float temp = SCREEN_CalculateTemp(&rawData.temperature);
+				temp = SCREEN_ConvertTemp(temp, returnTempUnit);
+
+
+				uint16_t integer_temp;
+				uint8_t fractional_temp;
+				uint8_t sign;
+
+				CP_breakFloat(temp, &integer_temp, &fractional_temp, &sign);
+                sprintf(buff, "0%01X%01X%01X%03X%02X", (uint8_t)dataType, (uint8_t)returnTempUnit, sign, integer_temp, fractional_temp);
                 break;
             case HUMIDITY:
-                sprintf(buff, "0%01X%05lX", (uint8_t)dataType, rawData.humidity);
+            	float humidity = SCREEN_CalculateHumidity(&rawData.humidity);
+
+            	uint16_t integer_hum;
+            	uint8_t fractional_hum;
+            	uint8_t sign_hum;
+
+            	CP_breakFloat(humidity, &integer_hum, &fractional_hum, &sign_hum);
+
+            	sprintf(buff, "0%01X%01X%01X%03X%02X", (uint8_t)dataType, SCREEN_Unit_Percent, sign_hum, integer_hum, fractional_hum);
                 break;
             default:
                 return GEN_ERROR;
@@ -289,26 +343,45 @@ CP_TX_StatusCode_t CP_createFrame_latest_sensor_data(uint8_t receiver, CP_Return
     }
 }
 
-CP_TX_StatusCode_t CP_createFrame_archive_sensor_data(uint8_t receiver, CP_ReturnSensorData_t dataType, uint16_t index, CP_Frame_t* out) {
-    char buff[13];
+CP_TX_StatusCode_t CP_createFrame_archive_sensor_data(uint8_t receiver, CP_ReturnSensorData_t dataType, uint16_t data_index, CP_Frame_t* out) {
+    char buff[18];
     Sensor_RawData_t rawData;
     uint8_t data_available;
 
     __disable_irq();
-    data_available = ring_bufferSensor_get_at_index(&SENSOR_ring_buffer, index, &rawData);
+    data_available = ring_bufferSensor_get_at_index(&SENSOR_ring_buffer, data_index, &rawData);
     __enable_irq();
 
     if (data_available) {
         switch (dataType) {
             case TEMPERATURE:
-                sprintf(buff, "0%03X%01X%05lX", index, (uint8_t)dataType, rawData.temperature);
+            	float temp = SCREEN_CalculateTemp(&rawData.temperature);
+            	temp = SCREEN_ConvertTemp(temp, returnTempUnit);
+
+
+            	uint16_t integer_temp;
+            	uint8_t fractional_temp;
+            	uint8_t sign;
+
+            	CP_breakFloat(temp, &integer_temp, &fractional_temp, &sign);
+
+                sprintf(buff, "0%03X%01X%01X%01X%03X%02X", data_index, (uint8_t)dataType, (uint8_t)returnTempUnit, sign, integer_temp, fractional_temp);
                 break;
             case HUMIDITY:
-                sprintf(buff, "0%03X%01X%05lX", index, (uint8_t)dataType, rawData.humidity);
+            	float humidity = SCREEN_CalculateHumidity(&rawData.humidity);
+
+            	uint16_t integer_hum;
+            	uint8_t fractional_hum;
+            	uint8_t sign_hum;
+
+            	CP_breakFloat(humidity, &integer_hum, &fractional_hum, &sign_hum);
+
+            	sprintf(buff, "0%03X%01X%01X%01X%03X%02X", data_index, (uint8_t)dataType, SCREEN_Unit_Percent, sign_hum, integer_hum, fractional_hum);
                 break;
             default:
                 return GEN_ERROR;
         }
+
         CP_gen_frame((char*)buff, receiver, out);
         return GEN_OK;
     } else {
@@ -458,13 +531,7 @@ CP_StatusCode_t	CP_parse_command(CP_Frame_t* frame, CP_Command_t* out) {
 }
 
 void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
-	if(strcmp(cmd->name, "GETOK") == 0) {
-		if(cmd->arg_count == 0) {
-			CP_send_status_frame(receiver);
-		} else {
-			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
-		}
-	} else if(strcmp(cmd->name, "SETINTERVAL") == 0) {
+	if(strcmp(cmd->name, "SETINTERVAL") == 0) {
 		if(cmd->arg_count == 1) {
 			uint32_t interval = 0;
 
@@ -505,7 +572,15 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 		} else {
 			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
 		}
-	} else if(strcmp(cmd->name, "SETTEMPUNIT") == 0) {
+	} else if(strcmp(cmd->name, "GETRETURNTEMPUNIT") == 0) {
+		if(cmd->arg_count == 0) {
+			CP_Frame_t frame;
+			CP_createFrame_returnTempUnit(receiver, &frame);
+			CP_send_frame(&frame);
+		} else {
+			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
+		}
+	} else if(strcmp(cmd->name, "SETSCREENTEMPUNIT") == 0 || strcmp(cmd->name, "SETRETURNTEMPUNIT") == 0) {
 		if(cmd->arg_count == 1) {
 
 			uint8_t temp_mode;
@@ -516,19 +591,21 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 				return;
 			}
 
+			SCREEN_Units_t* out = strcmp(cmd->name, "SETSCREENTEMPUNIT") == 0 ? &tempUnit : &returnTempUnit;
+
 			switch(temp_mode) {
 				case 0:
-					tempUnit = SCREEN_TempUnit_C;
+					*out = SCREEN_TempUnit_C;
 					SCREEN_Update();
 					CP_send_status_frame(receiver);
 				break;
 				case 1:
-					tempUnit = SCREEN_TempUnit_F;
+					*out = SCREEN_TempUnit_F;
 					SCREEN_Update();
 					CP_send_status_frame(receiver);
 				break;
 				case 2:
-					tempUnit = SCREEN_TempUnit_K;
+					*out = SCREEN_TempUnit_K;
 					SCREEN_Update();
 					CP_send_status_frame(receiver);
 					break;
@@ -544,6 +621,17 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 			CP_Frame_t frame;
 			CP_createFrame_measurement_interval(receiver, &frame);
 			CP_send_frame(&frame);
+		} else {
+			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
+		}
+	} else if(strcmp(cmd->name, "GETLATESTINDEX") == 0) {
+		if(cmd->arg_count == 0) {
+			CP_Frame_t frame;
+			if(CP_createFrame_latest_index(receiver, &frame) == GEN_OK) {
+				CP_send_frame(&frame);
+			} else {
+				CP_send_error_frame(RFS_BUFFER_EMPTY, receiver);
+			}
 		} else {
 			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
 		}
@@ -592,46 +680,81 @@ void CP_CMD_execute(CP_Command_t* cmd, uint8_t receiver) {
 			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
 		}
 	} else if(strcmp(cmd->name, "GETARCHIVE") == 0) {
-		if(cmd->arg_count == 2) {
-			uint16_t index;
+		if(cmd->arg_count == 3) {
+			uint16_t index_from;
+			uint16_t index_to;
 			uint8_t data_type;
 
-			if(HEX_decode(cmd->arguments[0], (void*)&index, 0x0, 0x2ED, HEXDM_16BIT) != HEXD_OK) {
+			if(HEX_decode(cmd->arguments[0], (void*)&index_from, 0x0, 0x2ED, HEXDM_16BIT) != HEXD_OK) {
 				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 				CP_Free_mem(cmd);
 				return;
 			}
 
-			if(HEX_decode(cmd->arguments[1], (void*)&data_type, 0x0, 0x1, HEXDM_8BIT) != HEXD_OK) {
+			if(HEX_decode(cmd->arguments[1], (void*)&index_to, 0x1, 0x2ED, HEXDM_16BIT) != HEXD_OK) {
 				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 				CP_Free_mem(cmd);
 				return;
+			}
+
+			if(HEX_decode(cmd->arguments[2], (void*)&data_type, 0x0, 0x1, HEXDM_8BIT) != HEXD_OK) {
+				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
+				CP_Free_mem(cmd);
+				return;
+			}
+
+			if(index_from > index_to) {
+				CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
+				CP_Free_mem(cmd);
+				return;
+			}
+
+
+			__disable_irq();
+			uint8_t data_available = ring_bufferSensor_can_get_range(&SENSOR_ring_buffer, index_from, index_to);
+			__enable_irq();
+
+
+			if(!data_available) {
+				CP_send_error_frame(RFS_INDEX_ERROR, receiver);
+				CP_Free_mem(cmd);
 			}
 
 			switch(data_type) {
 				CP_Frame_t frame;
 				case 0:
-					if(CP_createFrame_archive_sensor_data(receiver, TEMPERATURE, index, &frame)) {
-						CP_send_frame(&frame);
-						break;
-					} else {
-						CP_send_error_frame(RFS_INDEX_ERROR, receiver);
-						break;
+					for(uint16_t i = index_from; i <= index_to; i++) {
+						memset(&frame, 0, sizeof(CP_Frame_t));
+
+						if(CP_createFrame_archive_sensor_data(receiver, TEMPERATURE, i, &frame) == GEN_OK) {
+							CP_send_frame(&frame);
+						} else {
+							CP_send_error_frame(RFS_INDEX_ERROR, receiver);
+							CP_Free_mem(cmd);
+							return;
+						}
 					}
+					break;
 				case 1:
-					if(CP_createFrame_archive_sensor_data(receiver, HUMIDITY, index, &frame)) {
-						CP_send_frame(&frame);
-						break;
-					} else {
-						CP_send_error_frame(RFS_INDEX_ERROR, receiver);
-						break;
+					for(uint16_t i = index_from; i <= index_to; i++) {
+						memset(&frame, 0, sizeof(CP_Frame_t));
+
+						if(CP_createFrame_archive_sensor_data(receiver, HUMIDITY, i, &frame) == GEN_OK) {
+							CP_send_frame(&frame);
+						} else {
+							CP_send_error_frame(RFS_INDEX_ERROR, receiver);
+							break;
+						}
 					}
+					break;
 				default:
 					CP_send_error_frame(RFS_COMMAND_ARGUMENT_INVALID, receiver);
 					break;
 			}
 		} else {
 			CP_send_error_frame(RFS_COMMAND_ARGUMENT_COUNT_ERROR, receiver);
+			CP_Free_mem(cmd);
+			return;
 		}
 	} else {
 		CP_send_error_frame(RFS_COMMAND_UNKNOWN, receiver);
@@ -647,4 +770,16 @@ void CP_Free_mem(CP_Command_t* cmd) {
 	for (uint8_t i = 0; i < cmd->arg_count; i++) {
 		free(cmd->arguments[i]);
 	}
+}
+
+void CP_breakFloat(float num, uint16_t* integer, uint8_t* fractional, uint8_t* isNegative) {
+	*isNegative = num < 0;
+
+	float num_abs = fabs(num);
+
+	*integer = (uint16_t)num_abs;
+
+	float fraction = num_abs - *integer;
+
+	*fractional = (uint8_t)roundf(fraction * 100.0f);
 }
