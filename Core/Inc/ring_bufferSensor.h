@@ -66,4 +66,8 @@ uint8_t ring_bufferSensor_get_at_index(RingBufferSensor_RawData_t*, uint16_t, Se
 
 uint16_t ring_bufferSensor_get_oldest_index(RingBufferSensor_RawData_t*);
 
+uint8_t ring_bufferSensor_get_latest_index(RingBufferSensor_RawData_t*, uint16_t*);
+
+uint8_t ring_bufferSensor_can_get_range(RingBufferSensor_RawData_t*, uint16_t, uint16_t);
+
 #endif /* INC_RING_BUFFERSENSOR_H_ */

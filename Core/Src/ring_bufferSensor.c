@@ -78,3 +78,35 @@ uint8_t ring_bufferSensor_get_at_index(RingBufferSensor_RawData_t* rb, uint16_t 
 uint16_t ring_bufferSensor_get_oldest_index(RingBufferSensor_RawData_t* rb) {
     return rb->tail;
 }
+
+uint8_t ring_bufferSensor_get_latest_index(RingBufferSensor_RawData_t* rb, uint16_t* out) {
+    if (ring_bufferSensor_is_empty(rb)) {
+        return 0;
+    }
+
+    *out = (rb->head == 0) ? (rb->size - 1) : (rb->head - 1);
+    return 1;
+}
+
+uint8_t ring_bufferSensor_can_get_range(RingBufferSensor_RawData_t* rb, uint16_t index_from, uint16_t index_to) {
+    if (ring_bufferSensor_is_empty(rb)) {
+        return 0; // Błąd: bufor pusty
+    }
+
+    if (index_from > index_to) {
+        return 0; // Błąd: nieprawidłowy zakres (index_from > index_to)
+    }
+
+    if (index_from >= rb->size || index_to >= rb->size) {
+        return 0; // Błąd: indeks poza zakresem bufora
+    }
+
+    uint16_t count = index_to - index_from + 1;
+    uint16_t available_data = (rb->head - rb->tail + rb->size) % rb->size;
+
+    if (count > available_data) {
+        return 0; // Błąd: za mało danych w buforze
+    }
+
+    return 1; // Można pobrać dane
+}
