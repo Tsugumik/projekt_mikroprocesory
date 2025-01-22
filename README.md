@@ -73,7 +73,7 @@ Projekt został zrealizowany w ramach przedmiotu **Mikroprocesory**. Wykorzystan
 
 ## Autor
 
-- **Imię i nazwisko:** Błażej Drozd
+- **Imię i nazwisko:** Błażej Drozd - Politechnika Bydgoska
 - **Prowadzący:** dr inż. Sławomir Bujnowski
 
 ## Licencja
