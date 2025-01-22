@@ -37,6 +37,7 @@ void CP_receive_frame() {
 	static CP_Frame_t frame;
 	static uint8_t data_count = 0;
 	static uint8_t temp;
+	static uint8_t byte_counter = 0;
 
 	while(!ring_buffer_is_empty(&UART_rx_ring_buffer)) {
 		uint8_t rx_temp;
@@ -48,7 +49,9 @@ void CP_receive_frame() {
 		if(rx_temp == CP_START_CHAR) {
 			// Otrzymano znak początku ramki
 			data_count = 0;
-			read_state = CP_FS_WAIT_FOR_SENDER_BYTE1;
+			byte_counter = 0;
+			read_state = CP_FS_WAIT_FOR_SENDER_BYTE;
+			memset(&frame, 0, sizeof(CP_Frame_t));
 			continue;
 		} else if(rx_temp == CP_END_CHAR && read_state != CP_FS_WAIT_FOR_END_CHAR) {
 			// Otrzymano znak końca ramki, który nie był oczekiwany
@@ -81,63 +84,60 @@ void CP_receive_frame() {
 		}
 
 		switch(read_state) {
-			case CP_FS_WAIT_FOR_SENDER_BYTE1:
-				if(HEX_decode_char(rx_temp, &frame.sender_id) == HEXD_OK) {
+			case CP_FS_WAIT_FOR_SENDER_BYTE:
+				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
 					frame.sender_id <<= 4;
-					read_state = CP_FS_WAIT_FOR_SENDER_BYTE2;
-				} else {
-					read_state = CP_FS_WAIT_FOR_START_CHAR;
-				}
-				break;
-			case CP_FS_WAIT_FOR_SENDER_BYTE2:
-				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
 					frame.sender_id |= temp;
-					read_state = CP_FS_WAIT_FOR_RECEIVER_BYTE1;
+
+					byte_counter++;
+
+					if(byte_counter == 2) {
+						byte_counter = 0;
+						read_state = CP_FS_WAIT_FOR_RECEIVER_BYTE;
+					} else {
+						break;
+					}
 				} else {
 					read_state = CP_FS_WAIT_FOR_START_CHAR;
 				}
 				break;
-			case CP_FS_WAIT_FOR_RECEIVER_BYTE1:
-				if(HEX_decode_char(rx_temp, &frame.receiver_id) == HEXD_OK) {
-					frame.receiver_id <<= 4;
-					read_state = CP_FS_WAIT_FOR_RECEIVER_BYTE2;
-				} else {
-					read_state = CP_FS_WAIT_FOR_START_CHAR;
-				}
-				break;
-			case CP_FS_WAIT_FOR_RECEIVER_BYTE2:
+			case CP_FS_WAIT_FOR_RECEIVER_BYTE:
 				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
+					frame.receiver_id <<= 4;
 					frame.receiver_id |= temp;
 
-					// Sprawdzanie czy odbiorca się zgadza
-					if(frame.receiver_id != CP_STM_REC_ID) {
-						read_state = CP_FS_WAIT_FOR_START_CHAR;
-						break;
-					}
+					byte_counter++;
 
-					read_state = CP_FS_WAIT_FOR_DATALEN_BYTE1;
+					if(byte_counter == 2) {
+						if(frame.receiver_id != CP_STM_REC_ID) {
+							read_state = CP_FS_WAIT_FOR_START_CHAR;
+							break;
+						}
+
+						byte_counter = 0;
+
+						read_state = CP_FS_WAIT_FOR_DATALEN_BYTE;
+					}
 				} else {
 					read_state = CP_FS_WAIT_FOR_START_CHAR;
 				}
 				break;
-			case CP_FS_WAIT_FOR_DATALEN_BYTE1:
-				if(HEX_decode_char(rx_temp, &frame.data_length) == HEXD_OK) {
-					frame.data_length <<= 4;
-					read_state = CP_FS_WAIT_FOR_DATALEN_BYTE2;
-				} else {
-					read_state = CP_FS_WAIT_FOR_START_CHAR;
-				}
-				break;
-			case CP_FS_WAIT_FOR_DATALEN_BYTE2:
+			case CP_FS_WAIT_FOR_DATALEN_BYTE:
 				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
+					frame.data_length <<= 4;
 					frame.data_length |= temp;
-					if(frame.data_length > CP_MAX_DATA_LEN) {
-						read_state = CP_FS_WAIT_FOR_START_CHAR;
+
+					byte_counter++;
+
+					if(byte_counter == 2) {
+						if(frame.data_length > CP_MAX_DATA_LEN) {
+							read_state = CP_FS_WAIT_FOR_START_CHAR;
+							break;
+						}
+
+						read_state = frame.data_length > 0 ? CP_FS_READ_DATA : CP_FS_WAIT_FOR_CRC_BYTE;
 						break;
 					}
-
-					// Jeśli zadeklarowano 0 danych, odrzuć ramkę
-					read_state = frame.data_length > 0 ? CP_FS_READ_DATA : CP_FS_WAIT_FOR_CRC_BYTE1;
 				} else {
 					read_state = CP_FS_WAIT_FOR_START_CHAR;
 				}
@@ -159,43 +159,27 @@ void CP_receive_frame() {
 					frame.data[data_count] = rx_temp;
 					data_count++;
 
-					if(data_count == frame.data_length) read_state = CP_FS_WAIT_FOR_CRC_BYTE1;
+					if(data_count == frame.data_length) {
+						frame.crc = 0;
+						byte_counter = 0;
+						read_state = CP_FS_WAIT_FOR_CRC_BYTE;
+					}
 				} else {
 					read_state = CP_FS_WAIT_FOR_START_CHAR;
 				}
 				break;
-			case CP_FS_WAIT_FOR_CRC_BYTE1:
+			case CP_FS_WAIT_FOR_CRC_BYTE:
 				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
-					frame.crc = 0;
-					frame.crc |= temp;
 					frame.crc <<= 4;
-					read_state = CP_FS_WAIT_FOR_CRC_BYTE2;
-				} else {
-					read_state = CP_FS_WAIT_FOR_START_CHAR;
-				}
-				break;
-			case CP_FS_WAIT_FOR_CRC_BYTE2:
-				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
 					frame.crc |= temp;
-					frame.crc <<= 4;
-					read_state = CP_FS_WAIT_FOR_CRC_BYTE3;
-				} else {
-					read_state = CP_FS_WAIT_FOR_START_CHAR;
-				}
-				break;
-			case CP_FS_WAIT_FOR_CRC_BYTE3:
-				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
-					frame.crc |= temp;
-					frame.crc <<= 4;
-					read_state = CP_FS_WAIT_FOR_CRC_BYTE4;
-				} else {
-					read_state = CP_FS_WAIT_FOR_START_CHAR;
-				}
-				break;
-			case CP_FS_WAIT_FOR_CRC_BYTE4:
-				if(HEX_decode_char(rx_temp, &temp) == HEXD_OK) {
-					frame.crc |= temp;
-					read_state = CP_FS_WAIT_FOR_END_CHAR;
+
+
+					byte_counter++;
+
+					if(byte_counter == 4) {
+						read_state = CP_FS_WAIT_FOR_END_CHAR;
+						break;
+					}
 				} else {
 					read_state = CP_FS_WAIT_FOR_START_CHAR;
 				}
