@@ -71,11 +71,6 @@ Projekt został zrealizowany w ramach przedmiotu **Mikroprocesory**. Wykorzystan
 2. Podłącz płytkę do źródła zasilania lub portu USB.
 3. Urządzenie automatycznie rozpocznie pomiary i obsługę komunikacji.
 
-## Autor
-
-- **Imię i nazwisko:** Błażej Drozd - Politechnika Bydgoska
-- **Prowadzący:** dr inż. Sławomir Bujnowski
-
 ## Licencja
 
 Ten projekt jest objęty licencją MIT. Szczegóły znajdują się w pliku `LICENSE` w repozytorium.
